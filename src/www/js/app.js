@@ -58,6 +58,57 @@ const CHART_COLORS = {
   gradient: { light: ['rgba(0,0,0,1.0)', 'rgba(0,0,0,1.0)'], dark: ['rgba(128,128,128,0)', 'rgba(128,128,128,0)'] },
 };
 
+// AmneziaWG settings window. Placeholders show what an empty field means.
+const AWG_FIELDS = {
+  shared: [
+    { key: 's1', label: 'S1', placeholder: '0' },
+    { key: 's2', label: 'S2', placeholder: '0' },
+    { key: 's3', label: 'S3', placeholder: '0' },
+    { key: 's4', label: 'S4', placeholder: '0' },
+    { key: 'h1', label: 'H1', placeholder: '1' },
+    { key: 'h2', label: 'H2', placeholder: '2' },
+    { key: 'h3', label: 'H3', placeholder: '3' },
+    { key: 'h4', label: 'H4', placeholder: '4' },
+    {
+      key: 'headerProtectionKey', label: 'HeaderProtectionKey', type: 'key', wide: true, placeholder: 'off',
+    },
+    { key: 'randomTrailers', label: 'RandomTrailers', type: 'bool' },
+  ],
+  client: [
+    { key: 'jc', label: 'Jc', placeholder: '0' },
+    { key: 'jmin', label: 'Jmin', placeholder: '0' },
+    { key: 'jmax', label: 'Jmax', placeholder: '0' },
+    { key: 'persistentKeepalive', label: 'PersistentKeepalive', placeholder: '0' },
+    { key: 'rekeyAfterTime', label: 'RekeyAfterTime', placeholder: '120' },
+    { key: 'rekeyTimeout', label: 'RekeyTimeout', placeholder: '5' },
+    { key: 'rejectAfterTime', label: 'RejectAfterTime', placeholder: '180' },
+    { key: 'keepaliveTimeout', label: 'KeepaliveTimeout', placeholder: '10' },
+    { key: 'maxHandshakeAttempts', label: 'MaxHandshakeAttempts', placeholder: '18' },
+    { key: 'contentPaddingAddition', label: 'ContentPaddingAddition', placeholder: 'off' },
+    { key: 'disableCookies', label: 'DisableCookies', type: 'bool' },
+  ],
+  cps: ['i1', 'i2', 'i3', 'i4', 'i5'].map((key) => ({
+    key, label: key.toUpperCase(), type: 'cps', wide: true, placeholder: '<r 2><b 0x...>',
+  })),
+};
+
+const AWG_PROFILES = ['3.1', '2.0', '1.0'];
+
+// Values from the API -> form strings ('' = unset); booleans stay booleans.
+function awgParamsToForm(params) {
+  const form = {};
+  for (const [key, value] of Object.entries(params)) {
+    form[key] = typeof value === 'boolean' ? value : (value ?? '').toString();
+  }
+  return form;
+}
+
+function randomBase64Key() {
+  const bytes = new Uint8Array(32);
+  window.crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes));
+}
+
 new Vue({
   el: '#app',
   components: {
@@ -85,6 +136,16 @@ new Vue({
     clientEditExpireDate: null,
     clientEditExpireDateId: null,
     qrcode: null,
+
+    awgFields: AWG_FIELDS,
+    awgProfiles: AWG_PROFILES,
+    awgSettingsOpen: false,
+    awgForm: {},
+    awgErrors: {},
+    awgProfile: null,
+    awgVersions: {},
+    awgDefaultKeepalive: '0',
+    awgSaving: false,
 
     currentRelease: null,
     latestRelease: null,
@@ -364,6 +425,48 @@ new Vue({
         alert('Failed to load your file!');
       }
     },
+    openAwgSettings() {
+      this.api.getAwgSettings()
+        .then((settings) => {
+          this.awgForm = awgParamsToForm(settings.params);
+          this.awgProfile = settings.profile;
+          this.awgVersions = settings.versions;
+          this.awgDefaultKeepalive = settings.defaultPersistentKeepalive;
+          this.awgErrors = {};
+          this.awgSettingsOpen = true;
+        })
+        .catch((err) => alert(err.message || err.toString()));
+    },
+    generateAwgSettings(profile) {
+      this.api.generateAwgSettings(profile)
+        .then((params) => {
+          this.awgForm = awgParamsToForm(params);
+          this.awgErrors = {};
+        })
+        .catch((err) => alert(err.message || err.toString()));
+    },
+    generateAwgHeaderProtectionKey() {
+      this.awgForm.headerProtectionKey = randomBase64Key();
+    },
+    saveAwgSettings() {
+      this.awgSaving = true;
+      this.api.updateAwgSettings(this.awgForm)
+        .then(() => {
+          this.awgSettingsOpen = false;
+          alert(this.$t('awgSaved'));
+        })
+        .catch((err) => {
+          if (err.data && err.data.errors) {
+            this.awgErrors = err.data.errors;
+          } else {
+            alert(err.message || err.toString());
+          }
+        })
+        .finally(() => {
+          this.awgSaving = false;
+          this.refresh().catch(console.error);
+        });
+    },
     toggleTheme() {
       const themes = ['light', 'dark', 'auto'];
       const currentIndex = themes.indexOf(this.uiTheme);
@@ -490,7 +593,7 @@ new Vue({
       }
 
       const currentRelease = await this.api.getRelease();
-      const latestRelease = await fetch('https://wg-easy.github.io/wg-easy/changelog.json')
+      const latestRelease = await fetch('https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/docs/changelog.json')
         .then((res) => res.json())
         .then((releases) => {
           const releasesArray = Object.entries(releases).map(([version, changelog]) => ({

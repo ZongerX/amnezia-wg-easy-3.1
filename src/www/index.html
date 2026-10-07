@@ -82,7 +82,7 @@
               <p>{{latestRelease.changelog}}</p>
             </div>
 
-            <a href="https://github.com/wg-easy/wg-easy#updating" target="_blank"
+            <a href="https://github.com/ZongerX/amnezia-wg-easy-3.1#updating" target="_blank"
               class="p-3 rounded-md bg-white dark:bg-red-100 float-right font-sm font-semibold text-red-800 dark:text-red-600 flex-shrink-0 border-2 border-red-800 dark:border-red-600 hover:border-white dark:hover:border-red-600 hover:text-white dark:hover:text-red-100 hover:bg-red-800 dark:hover:bg-red-600 transition-all">
               {{$t("update")}} →
             </a>
@@ -112,6 +112,14 @@
                 </svg>
                 <span class="max-md:hidden text-sm">{{$t("backup")}}</span>
               </a>
+              <!-- AmneziaWG settings -->
+              <button @click="openAwgSettings" :title="$t('titleAwgSettings')"
+                class="hover:bg-red-800 hover:border-red-800 hover:text-white text-gray-700 dark:text-neutral-200 max-md:border-x-0 border-2 border-gray-100 dark:border-neutral-600 py-2 px-4 md:rounded inline-flex items-center transition">
+                <svg inline class="w-4 md:mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"></path>
+                </svg>
+                <span class="max-md:hidden text-sm">{{$t("awgSettings")}}</span>
+              </button>
               <!-- Sort client -->
               <button v-if="enableSortClient" @click="sortClient = !sortClient;"
                       class="hover:bg-red-800 hover:border-red-800 hover:text-white text-gray-700 dark:text-neutral-200 max-md:border-x-0 border-2 border-gray-100 dark:border-neutral-600 py-2 px-4 md:rounded inline-flex items-center transition">
@@ -604,6 +612,138 @@
                   {{$t("deleteClient")}}
                 </button>
                 <button type="button" @click="clientDelete = null"
+                  class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-neutral-500 shadow-sm px-4 py-2 bg-white dark:bg-neutral-500 text-base font-medium text-gray-700 dark:text-neutral-50 hover:bg-gray-50 dark:hover:bg-neutral-600 dark:hover:border-neutral-600 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                  {{$t("cancel")}}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AmneziaWG Settings Dialog -->
+        <div v-if="awgSettingsOpen" class="fixed z-10 inset-0 overflow-y-auto">
+          <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 transition-opacity" aria-hidden="true">
+              <div class="absolute inset-0 bg-gray-500 dark:bg-black opacity-75 dark:opacity-50"></div>
+            </div>
+
+            <!-- This element is to trick the browser into centering the modal contents. -->
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div
+              class="inline-block align-bottom bg-white dark:bg-neutral-700 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl w-full"
+              role="dialog" aria-modal="true" aria-labelledby="awg-modal-headline">
+              <div class="bg-white dark:bg-neutral-700 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div class="sm:flex sm:items-start">
+                  <div
+                    class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-800 sm:mx-0 sm:h-10 sm:w-10">
+                    <svg class="h-6 w-6 text-white" inline xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"></path>
+                    </svg>
+                  </div>
+                  <div class="flex-grow mt-3 sm:mt-0 sm:ml-4 min-w-0">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-neutral-200 text-center sm:text-left" id="awg-modal-headline">
+                      {{$t("titleAwgSettings")}}
+                      <span v-if="awgProfile" class="ml-2 align-middle text-xs font-semibold rounded-full px-2 py-0.5 bg-gray-100 dark:bg-neutral-600 text-gray-600 dark:text-neutral-300">
+                        {{$t("awgCurrentProfile")}}: {{awgProfile}}
+                      </span>
+                    </h3>
+
+                    <!-- Generate -->
+                    <div class="mt-4 flex flex-wrap items-center gap-2">
+                      <span class="text-sm text-gray-700 dark:text-neutral-200">{{$t("awgGenerate")}}:</span>
+                      <button v-for="profile in awgProfiles" :key="profile" type="button" @click="generateAwgSettings(profile)"
+                        class="hover:bg-red-800 hover:border-red-800 hover:text-white text-gray-700 dark:text-neutral-200 border-2 border-gray-100 dark:border-neutral-600 py-1 px-3 rounded text-sm transition">
+                        AWG {{profile}}
+                      </button>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-neutral-400">{{$t("awgGenerateHint")}} {{$t("awgEmptyHint")}}</p>
+
+                    <!-- Shared parameters -->
+                    <p class="mt-5 mb-2 text-sm font-bold text-gray-900 dark:text-neutral-200">{{$t("awgSharedGroup")}}</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div v-for="field in awgFields.shared" :key="field.key" :class="field.wide ? 'col-span-full' : ''">
+                        <label class="block text-gray-900 dark:text-neutral-200 text-xs font-bold mb-1 truncate" :for="'awg-' + field.key" :title="field.label">{{field.label}}</label>
+                        <label v-if="field.type === 'bool'" class="inline-flex items-center cursor-pointer mt-1">
+                          <input type="checkbox" class="sr-only" :id="'awg-' + field.key" v-model="awgForm[field.key]">
+                          <div class="inline-block align-middle rounded-full w-10 h-6 mr-2 transition-all"
+                            :class="awgForm[field.key] ? 'bg-red-800 hover:bg-red-700' : 'bg-gray-200 dark:bg-neutral-400 hover:bg-gray-300 dark:hover:bg-neutral-500'">
+                            <div class="rounded-full w-4 h-4 m-1 bg-white" :class="awgForm[field.key] ? 'ml-5' : ''"></div>
+                          </div>
+                          <span class="text-sm text-gray-700 dark:text-neutral-200">{{awgForm[field.key] ? 'on' : 'off'}}</span>
+                        </label>
+                        <div v-else class="flex">
+                          <input :id="'awg-' + field.key" type="text" v-model.trim="awgForm[field.key]" :placeholder="field.placeholder"
+                            class="rounded p-2 border-2 text-sm dark:bg-neutral-700 dark:text-neutral-200 focus:border-gray-200 focus:dark:border-neutral-500 dark:placeholder:text-neutral-400 outline-none w-full min-w-0"
+                            :class="awgErrors[field.key] ? 'border-red-600 dark:border-red-600' : 'border-gray-100 dark:border-neutral-600'" />
+                          <button v-if="field.type === 'key'" type="button" @click="generateAwgHeaderProtectionKey"
+                            class="ml-2 flex-shrink-0 hover:bg-red-800 hover:border-red-800 hover:text-white text-gray-700 dark:text-neutral-200 border-2 border-gray-100 dark:border-neutral-600 px-3 rounded text-sm transition">
+                            {{$t("awgGenerate")}}
+                          </button>
+                        </div>
+                        <p v-if="awgErrors[field.key]" class="text-xs text-red-600 mt-1">{{awgErrors[field.key]}}</p>
+                      </div>
+                    </div>
+
+                    <!-- Client / per-side parameters -->
+                    <p class="mt-5 mb-2 text-sm font-bold text-gray-900 dark:text-neutral-200">{{$t("awgClientGroup")}}</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div v-for="field in awgFields.client" :key="field.key">
+                        <label class="block text-gray-900 dark:text-neutral-200 text-xs font-bold mb-1 truncate" :for="'awg-' + field.key" :title="field.label">{{field.label}}</label>
+                        <label v-if="field.type === 'bool'" class="inline-flex items-center cursor-pointer mt-1">
+                          <input type="checkbox" class="sr-only" :id="'awg-' + field.key" v-model="awgForm[field.key]">
+                          <div class="inline-block align-middle rounded-full w-10 h-6 mr-2 transition-all"
+                            :class="awgForm[field.key] ? 'bg-red-800 hover:bg-red-700' : 'bg-gray-200 dark:bg-neutral-400 hover:bg-gray-300 dark:hover:bg-neutral-500'">
+                            <div class="rounded-full w-4 h-4 m-1 bg-white" :class="awgForm[field.key] ? 'ml-5' : ''"></div>
+                          </div>
+                          <span class="text-sm text-gray-700 dark:text-neutral-200">{{awgForm[field.key] ? 'on' : 'off'}}</span>
+                        </label>
+                        <input v-else :id="'awg-' + field.key" type="text" v-model.trim="awgForm[field.key]"
+                          :placeholder="field.key === 'persistentKeepalive' ? awgDefaultKeepalive : field.placeholder"
+                          class="rounded p-2 border-2 text-sm dark:bg-neutral-700 dark:text-neutral-200 focus:border-gray-200 focus:dark:border-neutral-500 dark:placeholder:text-neutral-400 outline-none w-full min-w-0"
+                          :class="awgErrors[field.key] ? 'border-red-600 dark:border-red-600' : 'border-gray-100 dark:border-neutral-600'" />
+                        <p v-if="awgErrors[field.key]" class="text-xs text-red-600 mt-1">{{awgErrors[field.key]}}</p>
+                      </div>
+                    </div>
+
+                    <!-- Signature packets I1-I5 -->
+                    <p class="mt-5 mb-1 text-sm font-bold text-gray-900 dark:text-neutral-200">{{$t("awgCpsGroup")}}</p>
+                    <p class="mb-2 text-xs text-gray-500 dark:text-neutral-400">{{$t("awgCpsHint")}}</p>
+                    <div class="grid grid-cols-1 gap-3">
+                      <div v-for="field in awgFields.cps" :key="field.key">
+                        <label class="block text-gray-900 dark:text-neutral-200 text-xs font-bold mb-1" :for="'awg-' + field.key">{{field.label}}</label>
+                        <textarea :id="'awg-' + field.key" rows="1" v-model.trim="awgForm[field.key]" :placeholder="field.placeholder" spellcheck="false"
+                          class="rounded p-2 border-2 text-sm font-mono dark:bg-neutral-700 dark:text-neutral-200 focus:border-gray-200 focus:dark:border-neutral-500 dark:placeholder:text-neutral-400 outline-none w-full break-all"
+                          :class="awgErrors[field.key] ? 'border-red-600 dark:border-red-600' : 'border-gray-100 dark:border-neutral-600'"></textarea>
+                        <p v-if="awgErrors[field.key]" class="text-xs text-red-600 mt-1">{{awgErrors[field.key]}}</p>
+                      </div>
+                    </div>
+
+                    <!-- Warning -->
+                    <div class="mt-5 rounded-md bg-yellow-50 dark:bg-yellow-900 border border-yellow-300 dark:border-yellow-700 p-3 text-sm text-yellow-800 dark:text-yellow-100">
+                      {{$t("awgWarning")}}
+                    </div>
+
+                    <p v-if="awgVersions.amneziawgGo || awgVersions.amneziawgTools" class="mt-3 text-xs text-gray-400 dark:text-neutral-400">
+                      amneziawg-go {{awgVersions.amneziawgGo || '?'}} · amneziawg-tools {{awgVersions.amneziawgTools || '?'}}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-gray-50 dark:bg-neutral-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button v-if="!awgSaving" type="button" @click="saveAwgSettings"
+                  class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-800 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">
+                  {{$t("awgSave")}}
+                </button>
+                <button v-else type="button"
+                  class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-800 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm cursor-not-allowed">
+                  <svg class="w-5 animate-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                    </path>
+                  </svg>
+                </button>
+                <button type="button" @click="awgSettingsOpen = false" :disabled="awgSaving"
                   class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-neutral-500 shadow-sm px-4 py-2 bg-white dark:bg-neutral-500 text-base font-medium text-gray-700 dark:text-neutral-50 hover:bg-gray-50 dark:hover:bg-neutral-600 dark:hover:border-neutral-600 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
                   {{$t("cancel")}}
                 </button>

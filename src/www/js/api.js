@@ -23,7 +23,9 @@ class API {
     const json = await res.json();
 
     if (!res.ok) {
-      throw new Error(json.error || res.statusText);
+      const error = new Error(json.error || json.message || res.statusText);
+      error.data = json;
+      throw error;
     }
 
     return json;
@@ -196,6 +198,29 @@ class API {
     return this.call({
       method: 'get',
       path: '/ui-sort-clients',
+    });
+  }
+
+  async getAwgSettings() {
+    return this.call({
+      method: 'get',
+      path: '/wireguard/awg',
+    });
+  }
+
+  async updateAwgSettings(params) {
+    return this.call({
+      method: 'put',
+      path: '/wireguard/awg',
+      body: { params },
+    });
+  }
+
+  async generateAwgSettings(profile) {
+    return this.call({
+      method: 'post',
+      path: '/wireguard/awg/generate',
+      body: { profile },
     });
   }
 
