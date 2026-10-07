@@ -109,7 +109,7 @@ function randomBase64Key() {
   return btoa(String.fromCharCode(...bytes));
 }
 
-// Placeholder names for new clients, e.g. "happy mike".
+// Placeholder names for new clients, e.g. "Happy Mike".
 const NAME_ADJECTIVES = [
   'amber', 'brave', 'calm', 'clever', 'cloudy', 'cosmic', 'crispy', 'dreamy', 'frosty', 'fuzzy',
   'gentle', 'golden', 'happy', 'jolly', 'lucky', 'lunar', 'mellow', 'mighty', 'misty', 'nimble',
@@ -127,8 +127,12 @@ function randomItem(list) {
   return list[Math.floor(Math.random() * list.length)];
 }
 
+function capitalize(word) {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
 function randomClientName() {
-  return `${randomItem(NAME_ADJECTIVES)} ${randomItem(NAME_NOUNS)}`;
+  return `${capitalize(randomItem(NAME_ADJECTIVES))} ${capitalize(randomItem(NAME_NOUNS))}`;
 }
 
 // Lifetimes for temporary clients, in milliseconds.
