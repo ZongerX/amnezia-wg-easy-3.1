@@ -1,6 +1,10 @@
-# AmnewziaWG Easy
+# AmneziaWG Easy 3.1
 
-You have found the easiest way to install & manage WireGuard on any Linux host!
+You have found the easiest way to install & manage AmneziaWG on any Linux host!
+
+The web UI of [w0rng/amnezia-wg-easy](https://github.com/w0rng/amnezia-wg-easy) on top of
+[AmneziaWG 3.1](https://docs.amnezia.org/documentation/amnezia-wg/): `amneziawg-go` v3.1.20260828 and
+`amneziawg-tools` v3.1.20260812, built from source, plus a window for all AmneziaWG 3.1 parameters.
 
 <p align="center">
   <img src="./assets/screenshot.png" width="802" />
@@ -8,7 +12,10 @@ You have found the easiest way to install & manage WireGuard on any Linux host!
 
 ## Features
 
-* All-in-one: AmneziaWG + Web UI.
+* All-in-one: AmneziaWG 3.1 (userspace `amneziawg-go`) + Web UI.
+* Edit AmneziaWG parameters in the Web UI: S1–S4, H1–H4 ranges, I1–I5, HeaderProtectionKey,
+  RandomTrailers, DisableCookies, ContentPaddingAddition, rekey/keepalive timings.
+* One-click parameter sets for AmneziaWG 3.1, 2.0 and 1.0 clients.
 * Easy installation, simple to use.
 * List, create, edit, delete, enable & disable clients.
 * Show a client's QR code.
@@ -62,8 +69,10 @@ To automatically install & run wg-easy, simply run:
   --sysctl="net.ipv4.ip_forward=1" \
   --device=/dev/net/tun:/dev/net/tun \
   --restart unless-stopped \
-  ghcr.io/w0rng/amnezia-wg-easy
+  ghcr.io/zongerx/amnezia-wg-easy-3.1
 ```
+
+Or with Docker Compose: edit `.env` and run `docker compose up -d` next to [docker-compose.yml](./docker-compose.yml).
 
 > 💡 Replace `YOUR_SERVER_IP` with your WAN IP, or a Dynamic DNS hostname.
 >
@@ -109,17 +118,51 @@ These options can be configured by setting environment variables using `-e KEY="
 | `UI_ENABLE_SORT_CLIENTS`      | `false`           | `true`                         | Enable UI sort clients by name                                                                                                                                                                                           |
 | `ENABLE_PROMETHEUS_METRICS`   | `false`           | `true`                         | Enable Prometheus metrics `http://0.0.0.0:51821/metrics` and `http://0.0.0.0:51821/metrics/json`                                                                                                                         |
 | `PROMETHEUS_METRICS_PASSWORD` | -                 | `$2y$05$Ci...`                 | If set, Basic Auth is required when requesting metrics. See [How to generate an bcrypt hash.md]("https://github.com/wg-easy/wg-easy/blob/master/How_to_generate_an_bcrypt_hash.md") for know how generate the hash.      |
-| `JC`                          | `random`          | `5`                            | Junk packet count — number of packets with random data that are sent before the start of the session.                                                                                                                    |
-| `JMIN`                        | `50`              | `25`                           | Junk packet minimum size — minimum packet size for Junk packet. That is, all randomly generated packets will have a size no smaller than Jmin.                                                                           |
-| `JMAX`                        | `1000`            | `250`                          | Junk packet maximum size — maximum size for Junk packets.                                                                                                                                                                |
-| `S1`                          | `random`          | `75`                           | Init packet junk size — the size of random data that will be added to the init packet, the size of which is initially fixed.                                                                                             |
-| `S2`                          | `random`          | `75`                           | Response packet junk size — the size of random data that will be added to the response packet, the size of which is initially fixed.                                                                                     |
-| `H1`                          | `random`          | `1234567891`                   | Init packet magic header — the header of the first byte of the handshake. Must be < uint_max.                                                                                                                            |
-| `H2`                          | `random`          | `1234567892`                   | Response packet magic header — header of the first byte of the handshake response. Must be < uint_max.                                                                                                                   |
-| `H3`                          | `random`          | `1234567893`                   | Underload packet magic header — UnderLoad packet header. Must be < uint_max.                                                                                                                                             |
-| `H4`                          | `random`          | `1234567894`                   | Transport packet magic header — header of the packet of the data packet. Must be < uint_max.                                                                                                                             |
+| `AWG_PROFILE`                 | `3.1`             | `2.0`                          | AmneziaWG parameter set generated on first start: `3.1`, `2.0` or `1.0`. See [AmneziaWG parameters](#amneziawg-parameters).                                                                                              |
+| `JC`, `JMIN`, `JMAX`, `S1`…`S4`, `H1`…`H4`, `I1`…`I5` | profile | `JC=5`, `H1=100-200`   | Override single generated values on first start.                                                                                                                                                                         |
+| `HEADER_PROTECTION_KEY`, `RANDOM_TRAILERS`, `DISABLE_COOKIES`, `CONTENT_PADDING_ADDITION` | profile | `RANDOM_TRAILERS=on` | Same, for the AmneziaWG 3.x parameters.                                                                                                                                                         |
+| `REKEY_AFTER_TIME`, `REKEY_TIMEOUT`, `REJECT_AFTER_TIME`, `KEEPALIVE_TIMEOUT`, `MAX_HANDSHAKE_ATTEMPTS` | profile | `100-120` | Same, for the AmneziaWG 3.x timings.                                                                                                                                                        |
 
 > If you change `WG_PORT`, make sure to also change the exposed port.
+
+## AmneziaWG parameters
+
+The parameters are generated once, on first start (when there is no `wg0.json` yet), from `AWG_PROFILE`
+and the env overrides above. After that they live in `wg0.json` and are edited with the **AmneziaWG**
+button above the client list. Saving restarts the tunnel; every client must then re-import its config.
+
+| Profile | What it generates | Clients |
+|---------|-------------------|---------|
+| `3.1` (default) | Same as the AmneziaVPN app: Jc 4–6, Jmin 10, Jmax 50, S1–S4 = 12, H1–H4 = 1–4, random HeaderProtectionKey, RandomTrailers and DisableCookies on, randomized timings, PersistentKeepalive 25–35 | AmneziaVPN 5.0.1.5+, AmneziaWG 3.1+ |
+| `2.0` | Random S1–S4 and four non-overlapping H1–H4 ranges, no 3.x parameters | AmneziaWG 2.0+ |
+| `1.0` | Random Jc, S1, S2 and single-value H1–H4, like w0rng/amnezia-wg-easy | any AmneziaWG |
+
+| Parameter | Must match on server and clients | Notes |
+|-----------|:---:|-------|
+| S1, S2, S3, S4 | yes | Random padding of init, response, cookie and data packets. ≥ 12 when HeaderProtectionKey is set. |
+| H1, H2, H3, H4 | yes | Packet type headers, a number or a range `a-b`; ranges must not overlap. |
+| HeaderProtectionKey | yes | 32-byte base64 key, encrypts packet headers (3.x). |
+| RandomTrailers | yes | Random trailing bytes on handshake packets (3.1). |
+| Jc, Jmin, Jmax | no | Junk packets sent before a handshake. |
+| I1…I5 | no | Signature packets sent before a handshake, clients only. Tags: `<b 0xHEX>`, `<r N>`, `<rc N>`, `<rd N>`, `<t>`. |
+| ContentPaddingAddition | no | Extra padding range for data packets (3.x). |
+| RekeyAfterTime, RekeyTimeout, RejectAfterTime, KeepaliveTimeout, MaxHandshakeAttempts | no | Randomized WireGuard timers, a number or a range (3.x). |
+| DisableCookies | no | Don't send cookie replies under load (3.1). |
+| PersistentKeepalive | no | Client keepalive, a number or a range. Empty means `WG_PERSISTENT_KEEPALIVE`. |
+
+An empty field means the parameter is off and is not written to the configs, so a parameter set without
+3.x values also works with AmneziaWG 1.x/2.x clients.
+
+> 💡 With S4 > 0 or ContentPaddingAddition, data packets get bigger: set `WG_MTU=1280` if large transfers stall.
+
+> 💡 `awg-quick` prefers the `amneziawg` kernel module when the host has it loaded and falls back to
+> `amneziawg-go` otherwise. Make sure a host module, if any, also supports AmneziaWG 3.1.
+
+### Migrating from w0rng/amnezia-wg-easy
+
+Point the image at `ghcr.io/zongerx/amnezia-wg-easy-3.1` and keep the same volume (`/etc/wireguard`).
+The existing `wg0.json` is read as is: its AmneziaWG 1.0 parameters stay, so the current clients keep
+working. To move to 3.1, open **AmneziaWG**, click **Generate AWG 3.1**, save, and re-import the client configs.
 
 ## Updating
 
@@ -128,12 +171,16 @@ To update to the latest version, simply run:
 ```bash
 docker stop amnezia-wg-easy
 docker rm amnezia-wg-easy
-docker pull ghcr.io/w0rng/amnezia-wg-easy
+docker pull ghcr.io/zongerx/amnezia-wg-easy-3.1
 ```
 
-And then run the `docker run -d \ ...` command above again.
+And then run the `docker run -d \ ...` command above again. With Docker Compose: `docker compose pull && docker compose up -d`.
+
+Images are published for `linux/amd64` and `linux/arm64`: `latest` from `master`, and one tag per branch (e.g. `dev`).
 
 ## Thanks
 
 Based on [wg-easy](https://github.com/wg-easy/wg-easy) by Emile Nijssen.  
-Use integrations with AmneziaWg from [amnezia-wg-easy](https://github.com/spcfox/amnezia-wg-easy) by Viktor Yudov.
+Use integrations with AmneziaWg from [amnezia-wg-easy](https://github.com/spcfox/amnezia-wg-easy) by Viktor Yudov
+and the Web UI of [amnezia-wg-easy](https://github.com/w0rng/amnezia-wg-easy) by w0rng.  
+AmneziaWG by [Amnezia](https://github.com/amnezia-vpn): [amneziawg-go](https://github.com/amnezia-vpn/amneziawg-go), [amneziawg-tools](https://github.com/amnezia-vpn/amneziawg-tools).
