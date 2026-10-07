@@ -5,7 +5,9 @@ const crypto = require('node:crypto');
 const basicAuth = require('basic-auth');
 const { createServer } = require('node:http');
 const { stat, readFile } = require('node:fs/promises');
-const { resolve, sep } = require('node:path');
+const fs = require('node:fs');
+const path = require('node:path');
+const { resolve, sep } = path;
 
 const expressSession = require('express-session');
 const debug = require('debug')('Server');
@@ -46,13 +48,47 @@ const {
   AWGTOOLS_VERSION,
   IMAGE_REF,
   GIT_SHA,
+  WG_PATH,
 } = require('../config');
 
-const requiresPassword = !!PASSWORD_HASH;
-if (!requiresPassword) {
+const GENERATED_PASSWORD_FILE = path.join(WG_PATH, 'password.hash');
+
+/**
+ * Web UI password hash: PASSWORD_HASH from the environment, otherwise the hash
+ * of a random password generated on first start. Its hash is kept next to
+ * wg0.json; the password itself is printed to the log once.
+ */
+const resolvePasswordHash = () => {
+  if (PASSWORD_HASH) return PASSWORD_HASH;
+
+  try {
+    return fs.readFileSync(GENERATED_PASSWORD_FILE, 'utf8').trim();
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+
+  const password = crypto.randomBytes(12).toString('base64url');
+  const hash = bcrypt.hashSync(password, 12);
+  fs.mkdirSync(WG_PATH, { recursive: true });
+  fs.writeFileSync(GENERATED_PASSWORD_FILE, `${hash}\n`, { mode: 0o600 });
+
   // eslint-disable-next-line no-console
-  console.warn('WARNING: PASSWORD_HASH is not set, the Web UI is open to anyone who can reach it. Run setup.sh or see the README.');
-}
+  console.log([
+    '',
+    '='.repeat(72),
+    `  Web UI password (generated on first start): ${password}`,
+    '  Save it now, it is shown only once.',
+    '  Your own password: set PASSWORD_HASH in .env (see README).',
+    `  A new random one: delete ${GENERATED_PASSWORD_FILE} and restart.`,
+    '='.repeat(72),
+    '',
+  ].join('\n'));
+
+  return hash;
+};
+
+const passwordHash = resolvePasswordHash();
+const requiresPassword = !!passwordHash;
 const requiresPrometheusPassword = !!PROMETHEUS_METRICS_PASSWORD;
 
 /**
@@ -184,7 +220,7 @@ module.exports = class Server {
           });
         }
 
-        if (!isPasswordValid(password, PASSWORD_HASH)) {
+        if (!isPasswordValid(password, passwordHash)) {
           throw createError({
             status: 401,
             message: 'Incorrect Password',
@@ -214,7 +250,7 @@ module.exports = class Server {
         }
 
         if (req.url.startsWith('/api/') && req.headers['authorization']) {
-          if (isPasswordValid(req.headers['authorization'], PASSWORD_HASH)) {
+          if (isPasswordValid(req.headers['authorization'], passwordHash)) {
             return next();
           }
           return res.status(401).json({

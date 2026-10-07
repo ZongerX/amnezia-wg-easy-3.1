@@ -38,24 +38,35 @@
 mkdir -p ~/amnezia-wg-easy && cd ~/amnezia-wg-easy
 curl -fsSLO https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/docker-compose.yml
 curl -fsSLO https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/.env
-curl -fsSLO https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/setup.sh
-bash setup.sh
+nano .env    # заполните WG_HOST и WG_PORT
 docker compose up -d
+docker compose logs | grep "Web UI password"
 ```
 
-`setup.sh` задаёт три вопроса и записывает ответы в `.env`:
+В `.env` нужно заполнить два значения:
 
-* **WG_HOST** — определяется через `curl -4 ifconfig.me`; Enter, чтобы согласиться, или впишите домен.
-* **WG_PORT** — предлагается случайный UDP-порт. Стандартный 51820 сканеры и DPI проверяют первым.
-* **Пароль веб-интерфейса** — введите свой или нажмите Enter, чтобы сгенерировать. Пароль хэшируется bcrypt
-  (утилитой `wgpw` из образа), в `.env` попадает только хэш. Сгенерированный пароль показывается один раз — сохраните его.
+* **WG_HOST** — публичный IP или домен сервера. IP покажет `curl -4 ifconfig.me`.
+* **WG_PORT** — случайный UDP-порт, например из диапазона 20000–60000. Стандартный 51820 сканеры и DPI проверяют первым.
 
-Затем откройте `http://<WG_HOST>:51821`, создайте клиента и отсканируйте QR-код в AmneziaWG
-или вставьте ссылку `vpn://` в AmneziaVPN. Если на сервере есть файрвол, откройте в нём порт VPN (UDP).
+Затем откройте `http://<WG_HOST>:51821` и войдите с паролем из лога. Создайте клиента и отсканируйте
+QR-код в AmneziaWG или вставьте ссылку `vpn://` в AmneziaVPN. Если на сервере есть файрвол, откройте в нём
+порт VPN (UDP).
 
-> 💡 Без `PASSWORD_HASH` веб-интерфейс открыт без пароля, об этом предупреждает лог контейнера.
-> Задать пароль вручную: `docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw 'ВАШ_ПАРОЛЬ'`, а выведенную
-> строку `PASSWORD_HASH='…'` вставить в `.env` (одинарные кавычки обязательны: в хэше есть `$`).
+### Пароль веб-интерфейса
+
+Если `PASSWORD_HASH` пустой, при первом запуске генерируется случайный пароль. Он выводится в лог контейнера
+**один раз**, а в томе с данными хранится только его bcrypt-хэш (`/etc/wireguard/password.hash`).
+
+* **Потеряли пароль?** Удалите файл и перезапустите контейнер — в логе появится новый:
+  `docker exec amnezia-wg-easy rm /etc/wireguard/password.hash && docker compose restart`
+* **Свой пароль:** `docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw 'ВАШ_ПАРОЛЬ'` выведет строку
+  `PASSWORD_HASH='…'`. Вставьте её в `.env` (одинарные кавычки обязательны: в хэше есть `$`) и выполните
+  `docker compose up -d`. Пока `PASSWORD_HASH` задан, сгенерированный пароль не используется.
+* **Свой случайный пароль одной командой:**
+  ```bash
+  PASSWORD=$(openssl rand -base64 12); echo "Пароль веб-интерфейса: $PASSWORD"
+  sed -i "s|^PASSWORD_HASH=.*|$(docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw "$PASSWORD")|" .env
+  ```
 
 > 💡 `IMAGE_TAG` указывать не нужно: Compose по умолчанию берёт `latest` — стабильную сборку из `master`.
 > `IMAGE_TAG=dev` в `.env` нужен, только чтобы попробовать ветку разработки.
@@ -100,7 +111,7 @@ docker compose up -d
 |------------|--------------|--------|----------|
 | `PORT` | `51821` | `6789` | TCP-порт веб-интерфейса. |
 | `WEBUI_HOST` | `0.0.0.0` | `localhost` | Адрес, на котором слушает веб-интерфейс. |
-| `PASSWORD_HASH` | - | `'$2a$12$...'` | bcrypt-хэш пароля веб-интерфейса. Если не задан, вход без пароля. |
+| `PASSWORD_HASH` | - | `'$2a$12$...'` | bcrypt-хэш пароля веб-интерфейса. Если не задан, при первом запуске генерируется случайный пароль и выводится в лог, см. [Пароль веб-интерфейса](#пароль-веб-интерфейса). |
 | `WG_HOST` | - | `vpn.myserver.com` | Публичный адрес VPN-сервера. |
 | `WG_DEVICE` | `eth0` | `ens6f0` | Интерфейс, через который уходит трафик клиентов (внутри контейнера — `eth0`). |
 | `WG_PORT` | `51820` | `34519` | Публичный UDP-порт VPN. Лучше случайный. |

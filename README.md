@@ -38,24 +38,35 @@ The web UI of [w0rng/amnezia-wg-easy](https://github.com/w0rng/amnezia-wg-easy) 
 mkdir -p ~/amnezia-wg-easy && cd ~/amnezia-wg-easy
 curl -fsSLO https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/docker-compose.yml
 curl -fsSLO https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/.env
-curl -fsSLO https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/setup.sh
-bash setup.sh
+nano .env    # set WG_HOST and WG_PORT
 docker compose up -d
+docker compose logs | grep "Web UI password"
 ```
 
-`setup.sh` asks for three things and writes them into `.env`:
+In `.env` set two values:
 
-* **WG_HOST**: detected with `curl -4 ifconfig.me`, press Enter to accept or type a domain.
-* **WG_PORT**: a random UDP port is suggested. The default 51820 is the first one scanners and DPI look at.
-* **Web UI password**: type one or press Enter to generate one. The password is hashed with bcrypt
-  (`wgpw` inside the image) and only the hash is stored in `.env`. A generated password is shown once, save it.
+* **WG_HOST**: the public IP or domain of the server. The IP is printed by `curl -4 ifconfig.me`.
+* **WG_PORT**: pick a random UDP port, e.g. 20000–60000. The default 51820 is the first one scanners and DPI look at.
 
-Then open `http://<WG_HOST>:51821`, create a client and scan the QR code with AmneziaWG,
-or copy the `vpn://` link into AmneziaVPN. Open the VPN port (UDP) in your firewall if you have one.
+Then open `http://<WG_HOST>:51821` and log in with the password from the log. Create a client and scan
+the QR code with AmneziaWG, or copy the `vpn://` link into AmneziaVPN. Open the VPN port (UDP) in your
+firewall if you have one.
 
-> 💡 Without `PASSWORD_HASH` the Web UI has no password, and the container log says so.
-> To set it by hand: `docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw 'YOUR_PASSWORD'` and put the
-> printed `PASSWORD_HASH='…'` line into `.env` (keep the single quotes, the hash contains `$`).
+### Web UI password
+
+If `PASSWORD_HASH` is empty, a random password is generated on first start. It is printed **once** in the
+container log, and only its bcrypt hash is kept in the data volume (`/etc/wireguard/password.hash`).
+
+* **Lost it?** Delete the file and restart, a new password appears in the log:
+  `docker exec amnezia-wg-easy rm /etc/wireguard/password.hash && docker compose restart`
+* **Your own password:** `docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw 'YOUR_PASSWORD'` prints a
+  `PASSWORD_HASH='…'` line. Put it into `.env` (keep the single quotes, the hash contains `$`) and run
+  `docker compose up -d`. While `PASSWORD_HASH` is set, the generated password is ignored.
+* **A random one of your own, in one go:**
+  ```bash
+  PASSWORD=$(openssl rand -base64 12); echo "Web UI password: $PASSWORD"
+  sed -i "s|^PASSWORD_HASH=.*|$(docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw "$PASSWORD")|" .env
+  ```
 
 > 💡 `IMAGE_TAG` is optional: Compose uses `latest` (the stable `master` build) by default.
 > Set `IMAGE_TAG=dev` in `.env` only to try the development branch.
@@ -101,7 +112,7 @@ These options can be configured by setting environment variables using `-e KEY="
 |-------------------------------|-------------------|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `PORT`                        | `51821`           | `6789`                         | TCP port for Web UI.                                                                                                                                                                                                     |
 | `WEBUI_HOST`                  | `0.0.0.0`         | `localhost`                    | IP address web UI binds to.                                                                                                                                                                                              |
-| `PASSWORD_HASH`               | -                 | `$2y$05$Ci...`                 | When set, requires a password when logging in to the Web UI. See [How to generate an bcrypt hash.md]("https://github.com/wg-easy/wg-easy/blob/master/How_to_generate_an_bcrypt_hash.md") for know how generate the hash. |
+| `PASSWORD_HASH`               | -                 | `'$2a$12$...'`                 | bcrypt hash of the Web UI password. If empty, a random password is generated on first start and printed in the log, see [Web UI password](#web-ui-password). |
 | `WG_HOST`                     | -                 | `vpn.myserver.com`             | The public hostname of your VPN server.                                                                                                                                                                                  |
 | `WG_DEVICE`                   | `eth0`            | `ens6f0`                       | Ethernet device the wireguard traffic should be forwarded through.                                                                                                                                                       |
 | `WG_PORT`                     | `51820`           | `12345`                        | The public UDP port of your VPN server. WireGuard will listen on that (othwise default) inside the Docker container.                                                                                                     |
