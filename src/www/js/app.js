@@ -193,6 +193,7 @@ new Vue({
     clientCreateExpiryCustom: '',
     clientCreateDeleteOnExpire: false,
     clientInfoId: null,
+    clientInfoChartFrozen: null,
     vpnLink: null,
     vpnLinkCopied: null,
     versions: null,
@@ -471,6 +472,7 @@ new Vue({
       // Clicks on buttons, toggles and inline editors keep their own meaning.
       if (event.target.closest('button, a, input, textarea, select, [data-no-info]')) return;
       if (window.getSelection().toString()) return;
+      this.clientInfoChartFrozen = null;
       this.clientInfoId = client.id;
     },
     showVpnLink(client) {
@@ -783,6 +785,10 @@ new Vue({
       return this.clients.find((client) => client.id === this.clientInfoId) || null;
     },
     clientInfoSeries() {
+      // While the pointer is over the chart it stays still, otherwise every
+      // update redraws it and the tooltip disappears.
+      if (this.clientInfoChartFrozen) return this.clientInfoChartFrozen;
+
       const client = this.clientInfo;
       if (!client || !client.transferTxHistory) return [];
       return [

@@ -583,8 +583,12 @@
                 </div>
               </dl>
 
-              <div class="mt-5 h-52">
+              <div class="mt-5 h-52 relative"
+                @mouseenter="clientInfoChartFrozen = clientInfoSeries" @mouseleave="clientInfoChartFrozen = null">
                 <apexchart width="100%" height="100%" :options="clientInfoChartOptions" :series="clientInfoSeries"></apexchart>
+                <span v-if="clientInfoChartFrozen" class="absolute top-0 right-0 text-xs text-gray-400 dark:text-neutral-400">
+                  ❚❚ {{$t("chartPaused")}}
+                </span>
               </div>
             </div>
           </div>

@@ -80,6 +80,7 @@ const messages = { // eslint-disable-line no-unused-vars
     },
     deleteOnExpire: 'Delete when it expires (otherwise just disable)',
     willBeDeleted: 'will be deleted',
+    chartPaused: 'paused',
   },
   ua: {
     name: 'Ім`я',
@@ -194,6 +195,7 @@ const messages = { // eslint-disable-line no-unused-vars
     },
     deleteOnExpire: 'Удалить по истечении (иначе — просто отключить)',
     willBeDeleted: 'будет удалён',
+    chartPaused: 'пауза',
   },
   tr: { // Müslüm Barış Korkmazer @babico
     name: 'İsim',
