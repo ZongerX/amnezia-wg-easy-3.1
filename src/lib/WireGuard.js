@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('path');
 const debug = require('debug')('WireGuard');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 const QRCode = require('qrcode');
 const CRC32 = require('crc-32');
 
@@ -194,9 +195,10 @@ ${client.preSharedKey ? `PresharedKey = ${client.preSharedKey}\n` : ''
       publicKey: client.publicKey,
       createdAt: new Date(client.createdAt),
       updatedAt: new Date(client.updatedAt),
-      expiredAt: client.expiredAt !== null
+      expiredAt: client.expiredAt
         ? new Date(client.expiredAt)
         : null,
+      deleteOnExpire: client.deleteOnExpire === true,
       allowedIPs: client.allowedIPs,
       oneTimeLink: client.oneTimeLink ?? null,
       oneTimeLinkExpiresAt: client.oneTimeLinkExpiresAt ?? null,
@@ -282,7 +284,63 @@ Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
     });
   }
 
-  async createClient({ name, expiredDate }) {
+  /**
+   * vpn:// link for the AmneziaVPN app: base64url of qCompress()ed JSON
+   * (4-byte big-endian length + zlib). The JSON mirrors what AmneziaVPN
+   * builds itself when it imports a native AmneziaWG .conf.
+   */
+  async getClientVpnLink({ clientId }) {
+    const config = await this.getConfig();
+    const client = await this.getClient({ clientId });
+    if (!client.privateKey) {
+      throw new ServerError('This client has no private key', 400);
+    }
+
+    const params = Awg.normalize(config.server);
+    const lastConfig = {
+      config: await this.getClientConfiguration({ clientId }),
+      hostName: WG_HOST,
+      port: Number(WG_CONFIG_PORT),
+      client_priv_key: client.privateKey,
+      client_ip: `${client.address}/24`,
+      server_pub_key: config.server.publicKey,
+      ...(client.preSharedKey ? { psk_key: client.preSharedKey } : {}),
+      persistent_keep_alive: String(params.persistentKeepalive ?? WG_PERSISTENT_KEEPALIVE),
+      allowed_ips: WG_ALLOWED_IPS.split(',').map((ip) => ip.trim()).filter(Boolean),
+      mtu: WG_MTU || '1376',
+      ...Awg.interfaceFields(params, 'client'),
+    };
+
+    const vpnConfig = {
+      containers: [{
+        container: 'amnezia-awg',
+        awg: {
+          last_config: JSON.stringify(lastConfig),
+          isThirdPartyConfig: true,
+          port: String(WG_CONFIG_PORT),
+          transport_proto: 'udp',
+        },
+      }],
+      defaultContainer: 'amnezia-awg',
+      description: client.name,
+      hostName: WG_HOST,
+    };
+    const dns = (WG_DEFAULT_DNS || '').split(',').map((ip) => ip.trim()).filter(Boolean);
+    if (dns.length > 0) {
+      vpnConfig.dns1 = dns[0];
+      vpnConfig.dns2 = dns[1] || dns[0];
+    }
+
+    const json = Buffer.from(JSON.stringify(vpnConfig));
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(json.length);
+    const compressed = Buffer.concat([length, zlib.deflateSync(json, { level: 8 })]);
+    return `vpn://${compressed.toString('base64url')}`;
+  }
+
+  async createClient({
+    name, expiredDate, expiresAt, deleteOnExpire,
+  }) {
     if (!name) {
       throw new Error('Missing: Name');
     }
@@ -324,14 +382,22 @@ Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
       createdAt: new Date(),
       updatedAt: new Date(),
       expiredAt: null,
+      deleteOnExpire: false,
       enabled: true,
     };
-    if (expiredDate) {
+    if (expiresAt) {
+      // Exact moment (temporary configs: 1 hour, 1 day, custom date and time)
+      client.expiredAt = new Date(expiresAt);
+      if (Number.isNaN(client.expiredAt.getTime())) {
+        throw new ServerError(`Invalid expiration date: ${expiresAt}`, 400);
+      }
+    } else if (expiredDate) {
       client.expiredAt = new Date(expiredDate);
       client.expiredAt.setHours(23);
       client.expiredAt.setMinutes(59);
       client.expiredAt.setSeconds(59);
     }
+    client.deleteOnExpire = client.expiredAt !== null && deleteOnExpire === true;
     config.clients[id] = client;
 
     await this.saveConfig();
@@ -509,10 +575,14 @@ Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
     let needSaveConfig = false;
     // Expires Feature
     if (WG_ENABLE_EXPIRES_TIME === 'true') {
-      for (const client of Object.values(config.clients)) {
-        if (client.enabled !== true) continue;
-        if (client.expiredAt !== null && new Date() > new Date(client.expiredAt)) {
-          debug(`Client ${client.id} expired.`);
+      for (const [clientId, client] of Object.entries(config.clients)) {
+        if (!client.expiredAt || new Date() <= new Date(client.expiredAt)) continue;
+        if (client.deleteOnExpire === true) {
+          debug(`Client ${clientId} expired, deleting.`);
+          needSaveConfig = true;
+          delete config.clients[clientId];
+        } else if (client.enabled === true) {
+          debug(`Client ${clientId} expired.`);
           needSaveConfig = true;
           client.enabled = false;
           client.updatedAt = new Date();

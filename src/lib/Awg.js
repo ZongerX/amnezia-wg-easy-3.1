@@ -46,6 +46,13 @@ const PROFILES = ['3.1', '2.0', '1.0'];
 // Minimum S1-S4 when HeaderProtectionKey is set (ChaCha20 nonce size).
 const HEADER_PROTECTION_MIN_PADDING = 12;
 
+// WireGuard message sizes padded by S1-S4: init, response, cookie, transport.
+// Padded sizes must differ, otherwise AWG 1.x/2.x peers can't tell the
+// packet types apart (AmneziaVPN enforces the same).
+const PACKET_SIZES = {
+  s1: 148, s2: 92, s3: 64, s4: 32,
+};
+
 // Tags accepted by amneziawg-go in I1-I5 (device/obf.go).
 const CPS_TAGS = ['b', 't', 'r', 'rc', 'rd', 'd', 'ds', 'dz'];
 
@@ -91,13 +98,26 @@ const validateCps = (value) => {
 
 const randomJunkSize = () => randomInt(15, 150);
 
-// S2 must not equal S1 + 56: an AWG 1.x peer could not tell init and response apart.
-const randomS2 = (s1) => {
-  let s2;
+// Pairs of S keys whose padded packet sizes are equal.
+const paddingCollisions = (params) => {
+  const keys = Object.keys(PACKET_SIZES);
+  const size = (key) => PACKET_SIZES[key] + (Number.isInteger(params[key]) ? params[key] : 0);
+  const collisions = [];
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      if (size(keys[i]) === size(keys[j])) collisions.push([keys[i], keys[j]]);
+    }
+  }
+  return collisions;
+};
+
+// Draws S paddings until all padded packet sizes differ.
+const randomPaddings = (generators) => {
+  let paddings;
   do {
-    s2 = randomJunkSize();
-  } while (s2 === s1 + 56);
-  return s2;
+    paddings = Object.fromEntries(Object.entries(generators).map(([key, generate]) => [key, generate()]));
+  } while (paddingCollisions(paddings).length > 0);
+  return paddings;
 };
 
 const shuffle = (list) => {
@@ -181,16 +201,17 @@ module.exports = class Awg {
     }
 
     if (profile === '2.0') {
-      const s1 = randomJunkSize();
       const [h1, h2, h3, h4] = randomHeaderRanges();
       return Object.assign(params, {
         jc: randomInt(4, 6),
         jmin: 10,
         jmax: 50,
-        s1,
-        s2: randomS2(s1),
-        s3: randomJunkSize(),
-        s4: randomInt(1, 32),
+        ...randomPaddings({
+          s1: randomJunkSize,
+          s2: randomJunkSize,
+          s3: randomJunkSize,
+          s4: () => randomInt(1, 32),
+        }),
         h1,
         h2,
         h3,
@@ -199,14 +220,15 @@ module.exports = class Awg {
     }
 
     if (profile === '1.0') {
-      const s1 = randomJunkSize();
       const [h1, h2, h3, h4] = randomHeaderValues();
       return Object.assign(params, {
         jc: randomInt(3, 9),
         jmin: 50,
         jmax: 1000,
-        s1,
-        s2: randomS2(s1),
+        ...randomPaddings({
+          s1: randomJunkSize,
+          s2: randomJunkSize,
+        }),
         h1,
         h2,
         h3,
@@ -296,6 +318,12 @@ module.exports = class Awg {
       }
     }
 
+    for (const [first, second] of paddingCollisions(params)) {
+      if (!errors[first] && !errors[second]) {
+        errors[second] = `Padded packet has the same size as with ${first.toUpperCase()}, pick another value`;
+      }
+    }
+
     if (!isUnset(params.headerProtectionKey) && !errors.headerProtectionKey) {
       for (const key of ['s1', 's2', 's3', 's4']) {
         if (!errors[key] && !(params[key] >= HEADER_PROTECTION_MIN_PADDING)) {
@@ -313,20 +341,30 @@ module.exports = class Awg {
    * parameter set without 3.x values stays readable by AWG 1.x/2.x peers.
    */
   static interfaceLines(params, side) {
+    return Object.entries(this.interfaceFields(params, side))
+      .map(([conf, value]) => `${conf} = ${value}`)
+      .join('\n');
+  }
+
+  /**
+   * { ConfigKey: 'value' } for the [Interface] section, see interfaceLines().
+   */
+  static interfaceFields(params, side) {
     const scopes = side === 'server'
       ? ['shared', 'local']
       : ['shared', 'local', 'client'];
 
-    return PARAMS
-      .filter(({ scope }) => scopes.includes(scope))
-      .map(({ key, conf, type }) => {
-        const value = params[key];
-        if (isUnset(value)) return null;
-        if (type === 'bool') return value ? `${conf} = on` : null;
-        return `${conf} = ${value}`;
-      })
-      .filter((line) => line !== null)
-      .join('\n');
+    const fields = {};
+    for (const { key, conf, type, scope } of PARAMS) {
+      const value = params[key];
+      if (!scopes.includes(scope) || isUnset(value)) continue;
+      if (type === 'bool') {
+        if (value) fields[conf] = 'on';
+      } else {
+        fields[conf] = String(value);
+      }
+    }
+    return fields;
   }
 
   /**

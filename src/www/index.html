@@ -2,7 +2,7 @@
 <html>
 
 <head>
-  <title>AmneziaWG</title>
+  <title>AmneziaWG Easy</title>
   <meta charset="utf-8"/>
   <link href="./css/app.css" rel="stylesheet">
   <link rel="manifest" href="./manifest.json">
@@ -27,7 +27,7 @@
       <div v-if="authenticated === true">
         <div class="flex flex-col-reverse xxs:flex-row flex-auto items-center items-end gap-3">
           <h1 class="text-4xl dark:text-neutral-200 font-medium flex-grow self-start mb-4">
-            <img src="./img/logo.svg" width="60" class="inline align-middle dark:bg mr-2" /><span class="align-middle">AmneziaWG</span>
+            <img src="./img/logo.svg" width="60" class="inline align-middle dark:bg mr-2 cursor-help" :title="versionsTitle" /><span class="align-middle">AmneziaWG Easy</span><sup class="ml-1 text-base font-semibold text-red-800 dark:text-red-500">3.1</sup>
           </h1>
           <div class="flex items-center grow-0 gap-3 items-end self-end xxs:self-center">
             <!-- Dark / light theme -->
@@ -135,7 +135,7 @@
               </button>
 
               <!-- New client -->
-              <button @click="clientCreate = true; clientCreateName = ''; clientExpiredDate = '';"
+              <button @click="openClientCreate"
                 class="hover:bg-red-800 hover:border-red-800 hover:text-white text-gray-700 dark:text-neutral-200 max-md:border-l-0 border-2 border-gray-100 dark:border-neutral-600 py-2 px-4 rounded-r-full md:rounded inline-flex items-center transition">
                 <svg class="w-4 md:mr-2" inline xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                   stroke="currentColor">
@@ -150,14 +150,15 @@
           <div>
             <!-- Client -->
             <div v-if="clients && clients.length > 0" v-for="client in clients" :key="client.id"
-              class="relative overflow-hidden border-b last:border-b-0 border-gray-100 dark:border-neutral-600 border-solid">
+              @click="openClientInfo(client, $event)"
+              class="relative overflow-hidden border-b last:border-b-0 border-gray-100 dark:border-neutral-600 border-solid cursor-pointer">
 
               <!-- Chart -->
-              <div v-if="uiChartType" :class="`absolute z-0 bottom-0 left-0 right-0 h-6 ${uiChartType === 1 && 'line-chart'}`" >
+              <div v-if="showRowCharts && client.transferTxSeries" :class="`absolute z-0 bottom-0 left-0 right-0 h-6 ${uiChartType === 1 && 'line-chart'}`" >
                 <apexchart width="100%" height="100%" :options="chartOptionsTX" :series="client.transferTxSeries">
                 </apexchart>
               </div>
-              <div v-if="uiChartType" :class="`absolute z-0 top-0 left-0 right-0 h-6 ${uiChartType === 1 && 'line-chart'}`" >
+              <div v-if="showRowCharts && client.transferRxSeries" :class="`absolute z-0 top-0 left-0 right-0 h-6 ${uiChartType === 1 && 'line-chart'}`" >
                 <apexchart width="100%" height="100%" :options="chartOptionsRX" :series="client.transferRxSeries"
                   style="transform: scaleY(-1);">
                 </apexchart>
@@ -203,7 +204,7 @@
 
                         <!-- Edit -->
                         <span v-show="clientEditNameId !== client.id"
-                          @click="clientEditName = client.name; clientEditNameId = client.id; setTimeout(() => $refs['client-' + client.id + '-name'][0].select(), 1);"
+                          data-no-info @click="clientEditName = client.name; clientEditNameId = client.id; setTimeout(() => $refs['client-' + client.id + '-name'][0].select(), 1);"
                           class="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
                           <svg xmlns="http://www.w3.org/2000/svg"
                             class="h-4 w-4 inline align-middle opacity-25 hover:opacity-100" fill="none"
@@ -227,7 +228,7 @@
 
                           <!-- Edit -->
                           <span v-show="clientEditAddressId !== client.id"
-                            @click="clientEditAddress = client.address; clientEditAddressId = client.id; setTimeout(() => $refs['client-' + client.id + '-address'][0].select(), 1);"
+                            data-no-info @click="clientEditAddress = client.address; clientEditAddressId = client.id; setTimeout(() => $refs['client-' + client.id + '-address'][0].select(), 1);"
                             class="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
                             <svg xmlns="http://www.w3.org/2000/svg"
                               class="h-4 w-4 inline align-middle opacity-25 hover:opacity-100" fill="none"
@@ -278,11 +279,11 @@
                             type="text"
                             class="rounded border-2 dark:bg-neutral-700 border-gray-100 dark:border-neutral-600 focus:border-gray-200 dark:focus:border-neutral-500 outline-none w-70 text-black dark:text-neutral-300 dark:placeholder:text-neutral-500 text-xs p-0" />
                           <span v-show="clientEditExpireDateId !== client.id"
-                            class="inline-block ">{{client.expiredAt  | expiredDateFormat}}</span>
+                            class="inline-block ">{{client.expiredAt  | expiredDateFormat}}<template v-if="client.expiredAt && client.deleteOnExpire"> · {{$t("willBeDeleted")}}</template></span>
 
                           <!-- Edit -->
                           <span v-show="clientEditExpireDateId !== client.id"
-                            @click="clientEditExpireDate = client.expiredAt ? client.expiredAt.toISOString().slice(0, 10) : 'yyyy-mm-dd'; clientEditExpireDateId = client.id; setTimeout(() => $refs['client-' + client.id + '-expire'][0].select(), 1);"
+                            data-no-info @click="clientEditExpireDate = client.expiredAt ? client.expiredAt.toISOString().slice(0, 10) : 'yyyy-mm-dd'; clientEditExpireDateId = client.id; setTimeout(() => $refs['client-' + client.id + '-expire'][0].select(), 1);"
                             class="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
                             <svg xmlns="http://www.w3.org/2000/svg"
                               class="h-4 w-4 inline align-middle opacity-25 hover:opacity-100" fill="none"
@@ -342,7 +343,7 @@
                   <!-- </div> --> <!-- <div class="flex flex-grow items-center"> -->
                 </div>
 
-                <div class="flex items-center justify-end">
+                <div class="flex items-center justify-end" data-no-info>
                   <div class="text-gray-400 dark:text-neutral-400 flex gap-1 items-center justify-between">
 
                     <!-- Enable/Disable -->
@@ -371,6 +372,22 @@
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                      </svg>
+                    </button>
+
+                    <!-- vpn:// link for AmneziaVPN -->
+                    <button :disabled="!client.downloadableConfig"
+                      class="align-middle bg-gray-100 dark:bg-neutral-600 dark:text-neutral-300 p-2 rounded transition"
+                      :class="{
+                        'hover:bg-red-800 dark:hover:bg-red-800 hover:text-white dark:hover:text-white': client.downloadableConfig,
+                        'is-disabled': !client.downloadableConfig
+                      }"
+                      :title="!client.downloadableConfig ? $t('noPrivKey') : $t('copyVpnLink')"
+                      @click="showVpnLink(client)">
+                      <svg class="w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
                       </svg>
                     </button>
 
@@ -428,7 +445,7 @@
             <div v-if="clients && clients.length === 0">
               <p class="text-center m-10 text-gray-400 dark:text-neutral-400 text-sm">
                 {{$t("noClients")}}<br /><br />
-                <button @click="clientCreate = true; clientCreateName = ''; clientExpiredDate = '';"
+                <button @click="openClientCreate"
                   class="bg-red-800 hover:bg-red-700 text-white border-2 border-none py-2 px-4 rounded inline-flex items-center transition">
                   <svg class="w-4 mr-2" inline xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
@@ -463,6 +480,112 @@
                 </svg>
               </button>
               <img :src="qrcode" />
+            </div>
+          </div>
+        </div>
+
+        <!-- vpn:// Link Dialog -->
+        <div v-if="vpnLink" class="fixed z-20 inset-0 overflow-y-auto">
+          <div class="flex items-center justify-center min-h-screen px-4 py-8">
+            <div class="fixed inset-0" aria-hidden="true" @click="vpnLink = null">
+              <div class="absolute inset-0 bg-gray-500 dark:bg-black opacity-75 dark:opacity-50"></div>
+            </div>
+            <div class="relative bg-white dark:bg-neutral-700 rounded-lg text-left shadow-xl w-full sm:max-w-xl p-6"
+              role="dialog" aria-modal="true" aria-labelledby="vpn-link-headline">
+              <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-neutral-200" id="vpn-link-headline">
+                {{$t("vpnLinkTitle")}}
+              </h3>
+              <p v-if="vpnLinkCopied !== null" class="mt-2 text-sm"
+                :class="vpnLinkCopied ? 'text-gray-500 dark:text-neutral-400' : 'text-red-600'">
+                {{vpnLinkCopied ? $t("vpnLinkCopied") : $t("vpnLinkCopyFailed")}}
+              </p>
+              <textarea ref="vpnLinkText" readonly rows="5" :value="vpnLink" @focus="$event.target.select()" spellcheck="false"
+                class="mt-3 w-full rounded p-2 border-2 border-gray-100 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-200 text-xs font-mono break-all outline-none resize-none"></textarea>
+              <div class="mt-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+                <button type="button" @click="vpnLink = null"
+                  class="inline-flex justify-center rounded-md border border-gray-300 dark:border-neutral-500 shadow-sm px-4 py-2 bg-white dark:bg-neutral-500 text-sm font-medium text-gray-700 dark:text-neutral-50 hover:bg-gray-50 dark:hover:bg-neutral-600 focus:outline-none">
+                  {{$t("close")}}
+                </button>
+                <button type="button" @click="copyVpnLink"
+                  class="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-800 text-sm font-medium text-white hover:bg-red-700 focus:outline-none">
+                  {{$t("copy")}}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Client Info Dialog -->
+        <div v-if="clientInfo" class="fixed z-10 inset-0 overflow-y-auto">
+          <div class="flex items-center justify-center min-h-screen px-4 py-8">
+            <div class="fixed inset-0" aria-hidden="true" @click="clientInfoId = null">
+              <div class="absolute inset-0 bg-gray-500 dark:bg-black opacity-75 dark:opacity-50"></div>
+            </div>
+            <div class="relative bg-white dark:bg-neutral-700 rounded-lg text-left shadow-xl w-full sm:max-w-2xl p-6"
+              role="dialog" aria-modal="true" aria-labelledby="client-info-headline">
+              <button type="button" @click="clientInfoId = null" :title="$t('close')"
+                class="absolute right-4 top-4 text-gray-400 hover:text-gray-600 dark:text-neutral-400 dark:hover:text-neutral-200">
+                <svg class="w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              <div class="flex items-center gap-3 pr-8">
+                <div class="h-10 w-10 flex-shrink-0 rounded-full bg-gray-50 relative">
+                  <svg class="w-6 m-2 text-gray-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
+                  </svg>
+                  <img v-if="clientInfo.avatar" :src="clientInfo.avatar" class="w-10 rounded-full absolute top-0 left-0" />
+                </div>
+                <div class="min-w-0">
+                  <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-neutral-200 truncate" id="client-info-headline">
+                    {{clientInfo.name}}
+                  </h3>
+                  <p class="text-sm text-gray-500 dark:text-neutral-400">
+                    {{clientInfo.address}} · {{clientInfo.enabled ? $t("enabled") : $t("disabled")}}
+                  </p>
+                </div>
+              </div>
+
+              <dl class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                <div>
+                  <dt class="text-xs text-gray-500 dark:text-neutral-400">{{$t("latestHandshake")}}</dt>
+                  <dd class="text-gray-900 dark:text-neutral-200">
+                    <template v-if="clientInfo.latestHandshakeAt">
+                      {{dateTime(new Date(clientInfo.latestHandshakeAt))}} · {{new Date(clientInfo.latestHandshakeAt) | timeago}}
+                    </template>
+                    <template v-else>{{$t("never")}}</template>
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500 dark:text-neutral-400">Endpoint</dt>
+                  <dd class="text-gray-900 dark:text-neutral-200 font-mono break-all">{{clientInfo.endpoint || '—'}}</dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500 dark:text-neutral-400">{{$t("downloaded")}}</dt>
+                  <dd class="text-gray-900 dark:text-neutral-200">{{bytes(clientInfo.transferTx || 0)}}</dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500 dark:text-neutral-400">{{$t("uploaded")}}</dt>
+                  <dd class="text-gray-900 dark:text-neutral-200">{{bytes(clientInfo.transferRx || 0)}}</dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500 dark:text-neutral-400">{{$t("currentSpeed")}}</dt>
+                  <dd class="text-gray-900 dark:text-neutral-200">
+                    ↓ {{(clientInfo.transferTxCurrent || 0) | bytes}}/s · ↑ {{(clientInfo.transferRxCurrent || 0) | bytes}}/s
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500 dark:text-neutral-400">{{$t("expires")}}</dt>
+                  <dd class="text-gray-900 dark:text-neutral-200">
+                    {{clientInfo.expiredAt | expiredDateFormat}}<template v-if="clientInfo.expiredAt && clientInfo.deleteOnExpire"> · {{$t("willBeDeleted")}}</template>
+                  </dd>
+                </div>
+              </dl>
+
+              <div class="mt-5 h-52">
+                <apexchart width="100%" height="100%" :options="clientInfoChartOptions" :series="clientInfoSeries"></apexchart>
+              </div>
             </div>
           </div>
         </div>
@@ -515,26 +638,44 @@
                     </h3>
                     <div class="mt-2">
                       <p class="text-sm text-gray-500">
+                        <!-- Empty name = the suggested one from the placeholder -->
                         <input
                           class="rounded p-2 border-2 dark:bg-neutral-700 dark:text-neutral-200 border-gray-100 dark:border-neutral-600 focus:border-gray-200 focus:dark:border-neutral-500 dark:placeholder:text-neutral-400 outline-none w-full"
-                          type="text" v-model.trim="clientCreateName" :placeholder="$t('name')" />
+                          type="text" v-model.trim="clientCreateName" :placeholder="clientCreatePlaceholder"
+                          @keyup.enter="createClient" ref="clientCreateNameInput" />
                       </p>
                     </div>
-                    <div class="mt-2" v-show="enableExpireTime">
-                      <p class="text-sm text-gray-500">
-                        <label class="block text-gray-900 dark:text-neutral-200 text-sm font-bold mb-2" for="expireDate">
-                            {{$t("ExpireDate")}}
-                        </label>
-                        <input
-                          class="rounded p-2 border-2 dark:bg-neutral-700 dark:text-neutral-200 border-gray-100 dark:border-neutral-600 focus:border-gray-200 focus:dark:border-neutral-500 dark:placeholder:text-neutral-400 outline-none w-full"
-                          type="date" v-model.trim="clientExpiredDate" :placeholder="$t('expireDate')" name="expireDate"/>
-                      </p>
+                    <div class="mt-3 text-left" v-show="enableExpireTime">
+                      <label class="block text-gray-900 dark:text-neutral-200 text-sm font-bold mb-2" for="clientCreateExpiry">
+                        {{$t("expiration")}}
+                      </label>
+                      <div class="flex flex-wrap gap-2">
+                        <button v-for="option in ['never', '1h', '1d', '7d', '30d', 'custom']" :key="option" type="button"
+                          @click="clientCreateExpiry = option"
+                          class="border-2 py-1 px-3 rounded text-sm transition"
+                          :class="clientCreateExpiry === option
+                            ? 'bg-red-800 border-red-800 text-white'
+                            : 'text-gray-700 dark:text-neutral-200 border-gray-100 dark:border-neutral-600 hover:border-red-800'">
+                          {{$t(`expiry.${option}`)}}
+                        </button>
+                      </div>
+                      <input v-if="clientCreateExpiry === 'custom'" id="clientCreateExpiry"
+                        class="mt-2 rounded p-2 border-2 dark:bg-neutral-700 dark:text-neutral-200 border-gray-100 dark:border-neutral-600 focus:border-gray-200 focus:dark:border-neutral-500 outline-none w-full"
+                        type="datetime-local" v-model="clientCreateExpiryCustom" />
+                      <label v-if="clientCreateExpiry !== 'never'" class="mt-3 inline-flex items-center cursor-pointer">
+                        <input type="checkbox" class="sr-only" v-model="clientCreateDeleteOnExpire">
+                        <div class="inline-block align-middle rounded-full w-10 h-6 mr-2 transition-all flex-shrink-0"
+                          :class="clientCreateDeleteOnExpire ? 'bg-red-800 hover:bg-red-700' : 'bg-gray-200 dark:bg-neutral-400 hover:bg-gray-300 dark:hover:bg-neutral-500'">
+                          <div class="rounded-full w-4 h-4 m-1 bg-white" :class="clientCreateDeleteOnExpire ? 'ml-5' : ''"></div>
+                        </div>
+                        <span class="text-sm text-gray-700 dark:text-neutral-200">{{$t("deleteOnExpire")}}</span>
+                      </label>
                     </div>
                   </div>
                 </div>
               </div>
               <div class="bg-gray-50 dark:bg-neutral-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button v-if="clientCreateName.length" type="button" @click="createClient(); clientCreate = null"
+                <button v-if="clientCreateExpiry !== 'custom' || clientCreateExpiryCustom" type="button" @click="createClient"
                   class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-800 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">
                   {{$t("create")}}
                 </button>
@@ -630,7 +771,7 @@
             <!-- This element is to trick the browser into centering the modal contents. -->
             <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
             <div
-              class="inline-block align-bottom bg-white dark:bg-neutral-700 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl w-full"
+              class="inline-block align-bottom bg-white dark:bg-neutral-700 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl lg:max-w-6xl w-full"
               role="dialog" aria-modal="true" aria-labelledby="awg-modal-headline">
               <div class="bg-white dark:bg-neutral-700 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div class="sm:flex sm:items-start">
@@ -658,10 +799,12 @@
                     </div>
                     <p class="mt-1 text-xs text-gray-500 dark:text-neutral-400">{{$t("awgGenerateHint")}} {{$t("awgEmptyHint")}}</p>
 
+                    <div class="lg:grid lg:grid-cols-2 lg:gap-8">
+                    <div>
                     <!-- Shared parameters -->
                     <p class="mt-5 mb-2 text-sm font-bold text-gray-900 dark:text-neutral-200">{{$t("awgSharedGroup")}}</p>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div v-for="field in awgFields.shared" :key="field.key" :class="field.wide ? 'col-span-full' : ''">
+                      <div v-for="field in awgFields.shared" :key="field.key" :class="field.wide ? 'col-span-2 sm:col-span-3' : ''">
                         <label class="block text-gray-900 dark:text-neutral-200 text-xs font-bold mb-1 truncate" :for="'awg-' + field.key" :title="field.label">{{field.label}}</label>
                         <label v-if="field.type === 'bool'" class="inline-flex items-center cursor-pointer mt-1">
                           <input type="checkbox" class="sr-only" :id="'awg-' + field.key" v-model="awgForm[field.key]">
@@ -704,17 +847,21 @@
                         <p v-if="awgErrors[field.key]" class="text-xs text-red-600 mt-1">{{awgErrors[field.key]}}</p>
                       </div>
                     </div>
+                    </div>
 
+                    <div>
                     <!-- Signature packets I1-I5 -->
                     <p class="mt-5 mb-1 text-sm font-bold text-gray-900 dark:text-neutral-200">{{$t("awgCpsGroup")}}</p>
                     <p class="mb-2 text-xs text-gray-500 dark:text-neutral-400">{{$t("awgCpsHint")}}</p>
-                    <div class="grid grid-cols-1 gap-3">
+                    <div class="grid grid-cols-1 gap-2">
                       <div v-for="field in awgFields.cps" :key="field.key">
-                        <label class="block text-gray-900 dark:text-neutral-200 text-xs font-bold mb-1" :for="'awg-' + field.key">{{field.label}}</label>
-                        <textarea :id="'awg-' + field.key" rows="1" v-model.trim="awgForm[field.key]" :placeholder="field.placeholder" spellcheck="false"
-                          class="rounded p-2 border-2 text-sm font-mono dark:bg-neutral-700 dark:text-neutral-200 focus:border-gray-200 focus:dark:border-neutral-500 dark:placeholder:text-neutral-400 outline-none w-full break-all"
-                          :class="awgErrors[field.key] ? 'border-red-600 dark:border-red-600' : 'border-gray-100 dark:border-neutral-600'"></textarea>
-                        <p v-if="awgErrors[field.key]" class="text-xs text-red-600 mt-1">{{awgErrors[field.key]}}</p>
+                        <div class="flex items-center gap-2">
+                          <label class="w-6 flex-shrink-0 text-gray-900 dark:text-neutral-200 text-xs font-bold" :for="'awg-' + field.key">{{field.label}}</label>
+                          <input :id="'awg-' + field.key" type="text" v-model.trim="awgForm[field.key]" :placeholder="field.placeholder" spellcheck="false"
+                            class="rounded p-2 border-2 text-sm font-mono dark:bg-neutral-700 dark:text-neutral-200 focus:border-gray-200 focus:dark:border-neutral-500 dark:placeholder:text-neutral-400 outline-none w-full min-w-0"
+                            :class="awgErrors[field.key] ? 'border-red-600 dark:border-red-600' : 'border-gray-100 dark:border-neutral-600'" />
+                        </div>
+                        <p v-if="awgErrors[field.key]" class="text-xs text-red-600 mt-1 ml-8">{{awgErrors[field.key]}}</p>
                       </div>
                     </div>
 
@@ -723,9 +870,15 @@
                       {{$t("awgWarning")}}
                     </div>
 
-                    <p v-if="awgVersions.amneziawgGo || awgVersions.amneziawgTools" class="mt-3 text-xs text-gray-400 dark:text-neutral-400">
-                      amneziawg-go {{awgVersions.amneziawgGo || '?'}} · amneziawg-tools {{awgVersions.amneziawgTools || '?'}}
+                    <p class="mt-3 text-xs text-gray-400 dark:text-neutral-400">
+                      <template v-if="awgVersions.amneziawgGo || awgVersions.amneziawgTools">
+                        amneziawg-go {{awgVersions.amneziawgGo || '?'}} · amneziawg-tools {{awgVersions.amneziawgTools || '?'}} ·
+                      </template>
+                      <a href="https://github.com/ZongerX/amnezia-wg-easy-3.1" target="_blank" rel="noopener noreferrer"
+                        class="hover:underline hover:text-gray-600 dark:hover:text-neutral-200">github.com/ZongerX/amnezia-wg-easy-3.1</a>
                     </p>
+                    </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -756,7 +909,7 @@
       <div v-if="authenticated === false">
         <h1 class="text-4xl font-medium my-16 text-gray-700 dark:text-neutral-200 text-center">
           <img src="./img/logo.svg" width="60" class="inline align-middle dark:bg" />
-          <span class="align-middle">AmneziaWG</span>
+          <span class="align-middle">AmneziaWG Easy</span><sup class="ml-1 text-base font-semibold text-red-800 dark:text-red-500">3.1</sup>
         </h1>
 
         <form @submit="login"

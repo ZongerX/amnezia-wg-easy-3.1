@@ -42,9 +42,17 @@ const {
   PROMETHEUS_METRICS_PASSWORD,
   DICEBEAR_TYPE,
   USE_GRAVATAR,
+  AWGGO_VERSION,
+  AWGTOOLS_VERSION,
+  IMAGE_REF,
+  GIT_SHA,
 } = require('../config');
 
 const requiresPassword = !!PASSWORD_HASH;
+if (!requiresPassword) {
+  // eslint-disable-next-line no-console
+  console.warn('WARNING: PASSWORD_HASH is not set, the Web UI is open to anyone who can reach it. Run setup.sh or see the README.');
+}
 const requiresPrometheusPassword = !!PROMETHEUS_METRICS_PASSWORD;
 
 /**
@@ -232,6 +240,16 @@ module.exports = class Server {
         debug(`Deleted Session: ${sessionId}`);
         return { success: true };
       }))
+      .get('/api/versions', defineEventHandler(() => {
+        return {
+          release: RELEASE,
+          imageRef: IMAGE_REF,
+          gitSha: GIT_SHA,
+          amneziawgGo: AWGGO_VERSION,
+          amneziawgTools: AWGTOOLS_VERSION,
+          node: process.versions.node,
+        };
+      }))
       .get('/api/wireguard/client', defineEventHandler(() => {
         return WireGuard.getClients();
       }))
@@ -254,10 +272,21 @@ module.exports = class Server {
         setHeader(event, 'Content-Type', 'text/plain');
         return config;
       }))
+      .get('/api/wireguard/client/:clientId/vpn-link', defineEventHandler(async (event) => {
+        const clientId = getRouterParam(event, 'clientId');
+        if (clientId === '__proto__' || clientId === 'constructor' || clientId === 'prototype') {
+          throw createError({ status: 403 });
+        }
+        const link = await WireGuard.getClientVpnLink({ clientId });
+        return { link };
+      }))
       .post('/api/wireguard/client', defineEventHandler(async (event) => {
-        const { name } = await readBody(event);
-        const { expiredDate } = await readBody(event);
-        await WireGuard.createClient({ name, expiredDate });
+        const {
+          name, expiredDate, expiresAt, deleteOnExpire,
+        } = await readBody(event);
+        await WireGuard.createClient({
+          name, expiredDate, expiresAt, deleteOnExpire,
+        });
         return { success: true };
       }))
       .delete('/api/wireguard/client/:clientId', defineEventHandler(async (event) => {

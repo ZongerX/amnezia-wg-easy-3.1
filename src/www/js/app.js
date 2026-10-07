@@ -109,6 +109,62 @@ function randomBase64Key() {
   return btoa(String.fromCharCode(...bytes));
 }
 
+// Placeholder names for new clients, e.g. "happy mike".
+const NAME_ADJECTIVES = [
+  'amber', 'brave', 'calm', 'clever', 'cloudy', 'cosmic', 'crispy', 'dreamy', 'frosty', 'fuzzy',
+  'gentle', 'golden', 'happy', 'jolly', 'lucky', 'lunar', 'mellow', 'mighty', 'misty', 'nimble',
+  'noble', 'polar', 'quiet', 'rapid', 'rusty', 'shiny', 'silent', 'silver', 'sleepy', 'snowy',
+  'spicy', 'stormy', 'sunny', 'swift', 'tiny', 'velvet', 'wild', 'windy', 'witty', 'zesty',
+];
+const NAME_NOUNS = [
+  'alex', 'anna', 'artem', 'boris', 'dasha', 'egor', 'eva', 'felix', 'gleb', 'hugo',
+  'igor', 'ilya', 'ivan', 'kate', 'kira', 'leo', 'lev', 'lily', 'maria', 'mark',
+  'max', 'mike', 'mila', 'nika', 'nina', 'oleg', 'olga', 'pavel', 'polina', 'roma',
+  'sam', 'sasha', 'sofia', 'tanya', 'tom', 'vera', 'vlad', 'yana', 'yuri', 'zoe',
+];
+
+function randomItem(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function randomClientName() {
+  return `${randomItem(NAME_ADJECTIVES)} ${randomItem(NAME_NOUNS)}`;
+}
+
+// Lifetimes for temporary clients, in milliseconds.
+const EXPIRY_PRESETS = {
+  '1h': 60 * 60 * 1000,
+  '1d': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
+};
+
+// navigator.clipboard only exists on HTTPS/localhost and may still be denied;
+// the panel is usually opened over plain HTTP, so fall back to execCommand('copy').
+async function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (err) {
+      console.warn('Clipboard API failed, falling back to execCommand:', err);
+    }
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    if (!document.execCommand('copy')) throw new Error('Copy command was rejected');
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
 new Vue({
   el: '#app',
   components: {
@@ -128,7 +184,14 @@ new Vue({
     clientDelete: null,
     clientCreate: null,
     clientCreateName: '',
-    clientExpiredDate: '',
+    clientCreatePlaceholder: '',
+    clientCreateExpiry: 'never',
+    clientCreateExpiryCustom: '',
+    clientCreateDeleteOnExpire: false,
+    clientInfoId: null,
+    vpnLink: null,
+    vpnLinkCopied: null,
+    versions: null,
     clientEditName: null,
     clientEditNameId: null,
     clientEditAddress: null,
@@ -162,7 +225,7 @@ new Vue({
     sortClient: true, // Sort clients by name, true = asc, false = desc
     enableExpireTime: false,
 
-    uiShowCharts: localStorage.getItem('uiShowCharts') === '1',
+    uiShowCharts: localStorage.getItem('uiShowCharts') !== '0',
     uiTheme: localStorage.theme || 'auto',
     prefersDarkScheme: window.matchMedia('(prefers-color-scheme: dark)'),
 
@@ -306,14 +369,15 @@ new Vue({
             name: 'Rx',
             data: this.clientsPersist[client.id].transferRxHistory,
           }];
-
-          client.transferTxHistory = this.clientsPersist[client.id].transferTxHistory;
-          client.transferRxHistory = this.clientsPersist[client.id].transferRxHistory;
-          client.transferMax = Math.max(...client.transferTxHistory, ...client.transferRxHistory);
-
-          client.transferTxSeries = this.clientsPersist[client.id].transferTxSeries;
-          client.transferRxSeries = this.clientsPersist[client.id].transferRxSeries;
         }
+
+        // Kept on every refresh: the client info window charts the history too.
+        client.transferTxHistory = this.clientsPersist[client.id].transferTxHistory;
+        client.transferRxHistory = this.clientsPersist[client.id].transferRxHistory;
+        client.transferMax = Math.max(...client.transferTxHistory, ...client.transferRxHistory);
+
+        client.transferTxSeries = this.clientsPersist[client.id].transferTxSeries;
+        client.transferRxSeries = this.clientsPersist[client.id].transferRxSeries;
 
         client.transferTxCurrent = this.clientsPersist[client.id].transferTxCurrent;
         client.transferRxCurrent = this.clientsPersist[client.id].transferRxCurrent;
@@ -365,14 +429,75 @@ new Vue({
           alert(err.message || err.toString());
         });
     },
+    openClientCreate() {
+      this.clientCreateName = '';
+      this.clientCreatePlaceholder = randomClientName();
+      this.clientCreateExpiry = 'never';
+      this.clientCreateExpiryCustom = '';
+      this.clientCreateDeleteOnExpire = false;
+      this.clientCreate = true;
+      this.$nextTick(() => {
+        if (this.$refs.clientCreateNameInput) this.$refs.clientCreateNameInput.focus();
+      });
+    },
+    clientCreateExpiresAt() {
+      if (this.clientCreateExpiry === 'custom') {
+        return this.clientCreateExpiryCustom
+          ? new Date(this.clientCreateExpiryCustom).toISOString()
+          : null;
+      }
+      const lifetime = EXPIRY_PRESETS[this.clientCreateExpiry];
+      return lifetime ? new Date(Date.now() + lifetime).toISOString() : null;
+    },
     createClient() {
-      const name = this.clientCreateName;
-      const expiredDate = this.clientExpiredDate;
+      // An empty field means "use the suggested name from the placeholder".
+      const name = this.clientCreateName || this.clientCreatePlaceholder;
       if (!name) return;
+      if (this.clientCreateExpiry === 'custom' && !this.clientCreateExpiryCustom) return;
 
-      this.api.createClient({ name, expiredDate })
+      const expiresAt = this.clientCreateExpiresAt();
+      const deleteOnExpire = expiresAt !== null && this.clientCreateDeleteOnExpire;
+      this.clientCreate = null;
+
+      this.api.createClient({ name, expiresAt, deleteOnExpire })
         .catch((err) => alert(err.message || err.toString()))
         .finally(() => this.refresh().catch(console.error));
+    },
+    openClientInfo(client, event) {
+      // Clicks on buttons, toggles and inline editors keep their own meaning.
+      if (event.target.closest('button, a, input, textarea, select, [data-no-info]')) return;
+      if (window.getSelection().toString()) return;
+      this.clientInfoId = client.id;
+    },
+    showVpnLink(client) {
+      this.vpnLink = null;
+      this.vpnLinkCopied = null;
+      this.api.getClientVpnLink({ clientId: client.id })
+        .then(({ link }) => {
+          this.vpnLink = link;
+          return this.copyVpnLink();
+        })
+        .catch((err) => alert(err.message || err.toString()));
+    },
+    copyVpnLink() {
+      return copyToClipboard(this.vpnLink)
+        .then(() => {
+          this.vpnLinkCopied = true;
+        })
+        .catch((err) => {
+          console.error(err);
+          this.vpnLinkCopied = false;
+          this.$nextTick(() => {
+            if (this.$refs.vpnLinkText) this.$refs.vpnLinkText.select();
+          });
+        });
+    },
+    loadVersions() {
+      this.api.getVersions()
+        .then((versions) => {
+          this.versions = versions;
+        })
+        .catch(console.error);
     },
     deleteClient(client) {
       this.api.deleteClient({ clientId: client.id })
@@ -497,16 +622,30 @@ new Vue({
     expiredDateFormat: (value) => {
       if (value === null) return i18n.t('Permanent');
       const dateTime = new Date(value);
-      const options = { year: 'numeric', month: 'long', day: 'numeric' };
-      return dateTime.toLocaleDateString(i18n.locale, options);
+      const options = {
+        year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+      };
+      return dateTime.toLocaleString(i18n.locale, options);
     },
     expiredDateEditFormat: (value) => {
       if (value === null) return 'yyyy-MM-dd';
     },
   },
+  watch: {
+    authenticated(value) {
+      if (value === true) this.loadVersions();
+    },
+  },
   mounted() {
     this.prefersDarkScheme.addListener(this.handlePrefersChange);
     this.setTheme(this.uiTheme);
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      this.clientInfoId = null;
+      this.vpnLink = null;
+      this.clientCreate = null;
+    });
 
     this.api = new API();
     this.api.getSession()
@@ -514,7 +653,7 @@ new Vue({
         this.authenticated = session.authenticated;
         this.requiresPassword = session.requiresPassword;
         this.refresh({
-          updateCharts: this.updateCharts,
+          updateCharts: true,
         }).catch((err) => {
           alert(err.message || err.toString());
         });
@@ -530,7 +669,7 @@ new Vue({
 
     setInterval(() => {
       this.refresh({
-        updateCharts: this.updateCharts,
+        updateCharts: true,
       }).catch(console.error);
     }, 1000);
 
@@ -632,8 +771,67 @@ new Vue({
       opts.stroke.width = UI_CHART_TYPES[this.uiChartType].strokeWidth;
       return opts;
     },
-    updateCharts() {
+    showRowCharts() {
       return this.uiChartType > 0 && this.uiShowCharts;
+    },
+    clientInfo() {
+      if (!this.clientInfoId || !this.clients) return null;
+      return this.clients.find((client) => client.id === this.clientInfoId) || null;
+    },
+    clientInfoSeries() {
+      const client = this.clientInfo;
+      if (!client || !client.transferTxHistory) return [];
+      return [
+        { name: this.$t('download'), data: client.transferTxHistory.slice() },
+        { name: this.$t('upload'), data: client.transferRxHistory.slice() },
+      ];
+    },
+    clientInfoChartOptions() {
+      return {
+        chart: {
+          type: 'area',
+          background: 'transparent',
+          toolbar: { show: false },
+          zoom: { enabled: false },
+          animations: { enabled: false },
+        },
+        theme: { mode: this.theme },
+        colors: ['#991b1b', '#9ca3af'],
+        stroke: { curve: 'smooth', width: 2 },
+        fill: {
+          type: 'gradient',
+          gradient: { opacityFrom: 0.4, opacityTo: 0, stops: [0, 100] },
+        },
+        dataLabels: { enabled: false },
+        legend: { show: true, position: 'top', horizontalAlign: 'left' },
+        grid: { borderColor: this.theme === 'dark' ? '#404040' : '#f3f4f6' },
+        xaxis: {
+          labels: { show: false },
+          axisTicks: { show: false },
+          axisBorder: { show: false },
+          tooltip: { enabled: false },
+        },
+        yaxis: {
+          min: 0,
+          labels: { formatter: (value) => `${bytes(value, 0)}/s` },
+        },
+        tooltip: {
+          x: { show: false },
+          y: { formatter: (value) => `${bytes(value)}/s` },
+        },
+      };
+    },
+    versionsTitle() {
+      if (!this.versions) return '';
+      const { versions } = this;
+      const build = [versions.imageRef, versions.gitSha && versions.gitSha.slice(0, 7)].filter(Boolean).join(' · ');
+      return [
+        `AmneziaWG Easy ${versions.release}${build ? ` (${build})` : ''}`,
+        `amneziawg-go ${versions.amneziawgGo || '?'}`,
+        `amneziawg-tools ${versions.amneziawgTools || '?'}`,
+        `Node.js ${versions.node}`,
+        `Vue ${Vue.version}`,
+      ].join('\n');
     },
     theme() {
       if (this.uiTheme === 'auto') {

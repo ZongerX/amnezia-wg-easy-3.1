@@ -87,6 +87,12 @@ ENV DEBUG=Server,WireGuard
 ENV AWGGO_VERSION=${AWGGO_VERSION}
 ENV AWGTOOLS_VERSION=${AWGTOOLS_VERSION}
 
+# Where the image was built from (passed by CI)
+ARG IMAGE_REF
+ARG GIT_SHA
+ENV IMAGE_REF=${IMAGE_REF}
+ENV GIT_SHA=${GIT_SHA}
+
 # Run Web UI
 WORKDIR /app
 CMD ["/usr/bin/dumb-init", "node", "server.js"]

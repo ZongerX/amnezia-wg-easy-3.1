@@ -126,11 +126,29 @@ class API {
     })));
   }
 
-  async createClient({ name, expiredDate }) {
+  async createClient({
+    name, expiredDate, expiresAt, deleteOnExpire,
+  }) {
     return this.call({
       method: 'post',
       path: '/wireguard/client',
-      body: { name, expiredDate },
+      body: {
+        name, expiredDate, expiresAt, deleteOnExpire,
+      },
+    });
+  }
+
+  async getClientVpnLink({ clientId }) {
+    return this.call({
+      method: 'get',
+      path: `/wireguard/client/${clientId}/vpn-link`,
+    });
+  }
+
+  async getVersions() {
+    return this.call({
+      method: 'get',
+      path: '/versions',
     });
   }
 

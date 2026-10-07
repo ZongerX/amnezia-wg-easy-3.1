@@ -37,10 +37,10 @@ iptables -D FORWARD -o wg0 -j ACCEPT;
 `.split('\n').join(' ');
 module.exports.LANG = process.env.LANG || 'en';
 module.exports.UI_TRAFFIC_STATS = process.env.UI_TRAFFIC_STATS || 'false';
-module.exports.UI_CHART_TYPE = process.env.UI_CHART_TYPE || 0;
+module.exports.UI_CHART_TYPE = process.env.UI_CHART_TYPE || 2;
 module.exports.WG_ENABLE_ONE_TIME_LINKS = process.env.WG_ENABLE_ONE_TIME_LINKS || 'false';
 module.exports.UI_ENABLE_SORT_CLIENTS = process.env.UI_ENABLE_SORT_CLIENTS || 'false';
-module.exports.WG_ENABLE_EXPIRES_TIME = process.env.WG_ENABLE_EXPIRES_TIME || 'false';
+module.exports.WG_ENABLE_EXPIRES_TIME = process.env.WG_ENABLE_EXPIRES_TIME || 'true';
 module.exports.ENABLE_PROMETHEUS_METRICS = process.env.ENABLE_PROMETHEUS_METRICS || 'false';
 module.exports.PROMETHEUS_METRICS_PASSWORD = process.env.PROMETHEUS_METRICS_PASSWORD;
 
@@ -82,3 +82,7 @@ module.exports.AWG_ENV = {
 
 module.exports.AWGGO_VERSION = process.env.AWGGO_VERSION || null;
 module.exports.AWGTOOLS_VERSION = process.env.AWGTOOLS_VERSION || null;
+
+// Where the image was built from (set by CI), shown in the Web UI.
+module.exports.IMAGE_REF = process.env.IMAGE_REF || null;
+module.exports.GIT_SHA = process.env.GIT_SHA || null;

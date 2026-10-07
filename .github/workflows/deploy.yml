@@ -57,6 +57,9 @@ jobs:
         context: .
         push: true
         platforms: linux/amd64,linux/arm64
+        build-args: |
+          IMAGE_REF=${{ github.ref_name }}
+          GIT_SHA=${{ github.sha }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
