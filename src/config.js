@@ -47,16 +47,38 @@ module.exports.PROMETHEUS_METRICS_PASSWORD = process.env.PROMETHEUS_METRICS_PASS
 module.exports.DICEBEAR_TYPE = process.env.DICEBEAR_TYPE || false;
 module.exports.USE_GRAVATAR = process.env.USE_GRAVATAR || false;
 
-const getRandomInt = (min, max) => min + Math.floor(Math.random() * (max - min));
-const getRandomJunkSize = () => getRandomInt(15, 150);
-const getRandomHeader = () => getRandomInt(1, 2_147_483_647);
+// AmneziaWG parameters are generated once, on first start (no wg0.json yet),
+// from AWG_PROFILE (3.1, 2.0 or 1.0). Any parameter set below overrides the
+// generated value. Afterwards they live in wg0.json and are edited in the UI.
+module.exports.AWG_PROFILE = process.env.AWG_PROFILE || '3.1';
+module.exports.AWG_ENV = {
+  jc: process.env.JC,
+  jmin: process.env.JMIN,
+  jmax: process.env.JMAX,
+  s1: process.env.S1,
+  s2: process.env.S2,
+  s3: process.env.S3,
+  s4: process.env.S4,
+  h1: process.env.H1,
+  h2: process.env.H2,
+  h3: process.env.H3,
+  h4: process.env.H4,
+  i1: process.env.I1,
+  i2: process.env.I2,
+  i3: process.env.I3,
+  i4: process.env.I4,
+  i5: process.env.I5,
+  headerProtectionKey: process.env.HEADER_PROTECTION_KEY,
+  randomTrailers: process.env.RANDOM_TRAILERS,
+  contentPaddingAddition: process.env.CONTENT_PADDING_ADDITION,
+  rekeyAfterTime: process.env.REKEY_AFTER_TIME,
+  rekeyTimeout: process.env.REKEY_TIMEOUT,
+  rejectAfterTime: process.env.REJECT_AFTER_TIME,
+  keepaliveTimeout: process.env.KEEPALIVE_TIMEOUT,
+  maxHandshakeAttempts: process.env.MAX_HANDSHAKE_ATTEMPTS,
+  disableCookies: process.env.DISABLE_COOKIES,
+  persistentKeepalive: process.env.WG_PERSISTENT_KEEPALIVE,
+};
 
-module.exports.JC = process.env.JC || getRandomInt(3, 10);
-module.exports.JMIN = process.env.JMIN || 50;
-module.exports.JMAX = process.env.JMAX || 1000;
-module.exports.S1 = process.env.S1 || getRandomJunkSize();
-module.exports.S2 = process.env.S2 || getRandomJunkSize();
-module.exports.H1 = process.env.H1 || getRandomHeader();
-module.exports.H2 = process.env.H2 || getRandomHeader();
-module.exports.H3 = process.env.H3 || getRandomHeader();
-module.exports.H4 = process.env.H4 || getRandomHeader();
+module.exports.AWGGO_VERSION = process.env.AWGGO_VERSION || null;
+module.exports.AWGTOOLS_VERSION = process.env.AWGTOOLS_VERSION || null;

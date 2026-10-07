@@ -8,6 +8,7 @@ const QRCode = require('qrcode');
 const CRC32 = require('crc-32');
 
 const Util = require('./Util');
+const Awg = require('./Awg');
 const ServerError = require('./ServerError');
 
 const {
@@ -26,16 +27,30 @@ const {
   WG_POST_DOWN,
   WG_ENABLE_EXPIRES_TIME,
   WG_ENABLE_ONE_TIME_LINKS,
-  JC,
-  JMIN,
-  JMAX,
-  S1,
-  S2,
-  H1,
-  H2,
-  H3,
-  H4,
+  AWG_PROFILE,
+  AWG_ENV,
+  AWGGO_VERSION,
+  AWGTOOLS_VERSION,
 } = require('../config');
+
+const formatAwgErrors = (errors) => Object.entries(errors)
+  .map(([key, message]) => `${key}: ${message}`)
+  .join('; ');
+
+// Parameters for a new installation: generated profile + env overrides.
+const initialAwgParams = () => {
+  const params = Awg.generate(AWG_PROFILE);
+  for (const [key, value] of Object.entries(Awg.normalize(AWG_ENV))) {
+    if (value !== null) params[key] = value;
+  }
+
+  const errors = Awg.validate(params);
+  if (Object.keys(errors).length > 0) {
+    throw new Error(`Invalid AmneziaWG environment parameters: ${formatAwgErrors(errors)}`);
+  }
+
+  return params;
+};
 
 module.exports = class WireGuard {
 
@@ -50,11 +65,16 @@ module.exports = class WireGuard {
       try {
         config = await fs.readFile(path.join(WG_PATH, 'wg0.json'), 'utf8');
         config = JSON.parse(config);
+        this.__upgradeConfig(config);
         debug('Configuration loaded.');
       } catch (err) {
-        const privateKey = await Util.exec('wg genkey');
-        const publicKey = await Util.exec(`echo ${privateKey} | wg pubkey`, {
-          log: 'echo ***hidden*** | wg pubkey',
+        // Only generate a new config when there is none: a broken wg0.json
+        // must not be silently replaced, it holds all clients.
+        if (err.code !== 'ENOENT') throw err;
+
+        const privateKey = await Util.exec('awg genkey');
+        const publicKey = await Util.exec(`echo ${privateKey} | awg pubkey`, {
+          log: 'echo ***hidden*** | awg pubkey',
         });
         const address = WG_DEFAULT_ADDRESS.replace('x', '1');
 
@@ -63,19 +83,11 @@ module.exports = class WireGuard {
             privateKey,
             publicKey,
             address,
-            jc: JC,
-            jmin: JMIN,
-            jmax: JMAX,
-            s1: S1,
-            s2: S2,
-            h1: H1,
-            h2: H2,
-            h3: H3,
-            h4: H4,
+            ...initialAwgParams(),
           },
           clients: {},
         };
-        debug('Configuration generated.');
+        debug(`Configuration generated (AmneziaWG profile ${AWG_PROFILE}).`);
       }
 
       return config;
@@ -84,19 +96,33 @@ module.exports = class WireGuard {
     return this.__configPromise;
   }
 
+  // Configs from older versions (AWG 1.0) only have jc..h4: bring values to
+  // their stored types, the missing parameters become null (off).
+  __upgradeConfig(config) {
+    Object.assign(config.server, Awg.normalize(config.server));
+    const errors = Awg.validate(config.server);
+    if (Object.keys(errors).length > 0) {
+      debug(`Warning: invalid AmneziaWG parameters in wg0.json: ${formatAwgErrors(errors)}`);
+    }
+  }
+
+  async __upInterface() {
+    await Util.exec('awg-quick down wg0').catch(() => {});
+    await Util.exec('awg-quick up wg0').catch((err) => {
+      if (err && err.message && err.message.includes('Cannot find device "wg0"')) {
+        throw new Error('AmneziaWG exited with the error: Cannot find device "wg0"\nThis usually means that /dev/net/tun is not available in the container!');
+      }
+
+      throw err;
+    });
+  }
+
   async getConfig() {
     if (!this.__configPromise) {
       const config = await this.__buildConfig();
 
       await this.__saveConfig(config);
-      await Util.exec('wg-quick down wg0').catch(() => {});
-      await Util.exec('wg-quick up wg0').catch((err) => {
-        if (err && err.message && err.message.includes('Cannot find device "wg0"')) {
-          throw new Error('WireGuard exited with the error: Cannot find device "wg0"\nThis usually means that your host\'s kernel does not support WireGuard!');
-        }
-
-        throw err;
-      });
+      await this.__upInterface();
       // await Util.exec(`iptables -t nat -A POSTROUTING -s ${WG_DEFAULT_ADDRESS.replace('x', '0')}/24 -o ' + WG_DEVICE + ' -j MASQUERADE`);
       // await Util.exec('iptables -A INPUT -p udp -m udp --dport 51820 -j ACCEPT');
       // await Util.exec('iptables -A FORWARD -i wg0 -j ACCEPT');
@@ -127,15 +153,7 @@ PreUp = ${WG_PRE_UP}
 PostUp = ${WG_POST_UP}
 PreDown = ${WG_PRE_DOWN}
 PostDown = ${WG_POST_DOWN}
-Jc = ${config.server.jc}
-Jmin = ${config.server.jmin}
-Jmax = ${config.server.jmax}
-S1 = ${config.server.s1}
-S2 = ${config.server.s2}
-H1 = ${config.server.h1}
-H2 = ${config.server.h2}
-H3 = ${config.server.h3}
-H4 = ${config.server.h4}
+${Awg.interfaceLines(config.server, 'server')}
 `;
 
     for (const [clientId, client] of Object.entries(config.clients)) {
@@ -162,7 +180,7 @@ ${client.preSharedKey ? `PresharedKey = ${client.preSharedKey}\n` : ''
 
   async __syncConfig() {
     debug('Config syncing...');
-    await Util.exec('wg syncconf wg0 <(wg-quick strip wg0)');
+    await Util.exec('awg syncconf wg0 <(awg-quick strip wg0)');
     debug('Config synced.');
   }
 
@@ -190,8 +208,9 @@ ${client.preSharedKey ? `PresharedKey = ${client.preSharedKey}\n` : ''
       endpoint: null,
     }));
 
-    // Loop WireGuard status
-    const dump = await Util.exec('wg show wg0 dump', {
+    // Loop WireGuard status. The interface line (AWG parameters, I1-I5 may
+    // contain spaces) is skipped; peer lines keep the WireGuard layout.
+    const dump = await Util.exec('awg show wg0 dump', {
       log: false,
     });
     dump
@@ -245,21 +264,13 @@ PrivateKey = ${client.privateKey ? `${client.privateKey}` : 'REPLACE_ME'}
 Address = ${client.address}/24
 ${WG_DEFAULT_DNS ? `DNS = ${WG_DEFAULT_DNS}\n` : ''}\
 ${WG_MTU ? `MTU = ${WG_MTU}\n` : ''}\
-Jc = ${config.server.jc}
-Jmin = ${config.server.jmin}
-Jmax = ${config.server.jmax}
-S1 = ${config.server.s1}
-S2 = ${config.server.s2}
-H1 = ${config.server.h1}
-H2 = ${config.server.h2}
-H3 = ${config.server.h3}
-H4 = ${config.server.h4}
+${Awg.interfaceLines(config.server, 'client')}
 
 [Peer]
 PublicKey = ${config.server.publicKey}
 ${client.preSharedKey ? `PresharedKey = ${client.preSharedKey}\n` : ''
 }AllowedIPs = ${WG_ALLOWED_IPS}
-PersistentKeepalive = ${WG_PERSISTENT_KEEPALIVE}
+PersistentKeepalive = ${config.server.persistentKeepalive ?? WG_PERSISTENT_KEEPALIVE}
 Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
   }
 
@@ -278,11 +289,11 @@ Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
 
     const config = await this.getConfig();
 
-    const privateKey = await Util.exec('wg genkey');
-    const publicKey = await Util.exec(`echo ${privateKey} | wg pubkey`, {
-      log: 'echo ***hidden*** | wg pubkey',
+    const privateKey = await Util.exec('awg genkey');
+    const publicKey = await Util.exec(`echo ${privateKey} | awg pubkey`, {
+      log: 'echo ***hidden*** | awg pubkey',
     });
-    const preSharedKey = await Util.exec('wg genpsk');
+    const preSharedKey = await Util.exec('awg genpsk');
 
     // Calculate next IP
     let address;
@@ -410,14 +421,17 @@ Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
     await this.saveConfig();
   }
 
+  // A restored backup may carry other AmneziaWG parameters. syncconf cannot
+  // unset interface parameters (e.g. HeaderProtectionKey), so restart instead.
   async __reloadConfig() {
     await this.__buildConfig();
-    await this.__syncConfig();
+    await this.__upInterface();
   }
 
   async restoreConfiguration(config) {
     debug('Starting configuration restore process.');
     const _config = JSON.parse(config);
+    this.__upgradeConfig(_config);
     await this.__saveConfig(_config);
     await this.__reloadConfig();
     debug('Configuration restore process completed.');
@@ -431,9 +445,63 @@ Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
     return backup;
   }
 
+  async getAwgSettings() {
+    const config = await this.getConfig();
+    const params = Awg.normalize(config.server);
+    return {
+      params,
+      profile: Awg.detectProfile(params),
+      defaultPersistentKeepalive: WG_PERSISTENT_KEEPALIVE,
+      versions: {
+        amneziawgGo: AWGGO_VERSION,
+        amneziawgTools: AWGTOOLS_VERSION,
+      },
+    };
+  }
+
+  async generateAwgSettings({ profile }) {
+    if (!Awg.PROFILES.includes(profile)) {
+      throw new ServerError(`Unknown AmneziaWG profile: ${profile}`, 400);
+    }
+    return Awg.generate(profile);
+  }
+
+  /**
+   * Validates and applies new AmneziaWG parameters.
+   * Returns { errors } (per field) when the input is invalid, { error } when
+   * AmneziaWG refused the parameters, {} on success. The interface is
+   * restarted, since syncconf cannot unset interface parameters; if it fails
+   * to come up, the previous parameters are restored.
+   */
+  async updateAwgSettings(input) {
+    const params = Awg.normalize(input);
+    const errors = Awg.validate(params);
+    if (Object.keys(errors).length > 0) {
+      return { errors };
+    }
+
+    const config = await this.getConfig();
+    const previous = Awg.normalize(config.server);
+    Object.assign(config.server, params);
+
+    try {
+      await this.__saveConfig(config);
+      await this.__upInterface();
+    } catch (err) {
+      debug(`Failed to apply AmneziaWG parameters, rolling back: ${err.message}`);
+      Object.assign(config.server, previous);
+      await this.__saveConfig(config);
+      await this.__upInterface();
+      return { error: `AmneziaWG rejected the parameters: ${err.message}` };
+    }
+
+    debug('AmneziaWG parameters updated.');
+    return {};
+  }
+
   // Shutdown wireguard
   async Shutdown() {
-    await Util.exec('wg-quick down wg0').catch(() => {});
+    await Util.exec('awg-quick down wg0').catch(() => {});
   }
 
   async cronJobEveryMinute() {

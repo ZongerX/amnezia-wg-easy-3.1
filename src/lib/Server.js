@@ -20,6 +20,7 @@ const {
   toNodeListener,
   readBody,
   setHeader,
+  setResponseStatus,
   serveStatic,
 } = require('h3');
 
@@ -320,6 +321,26 @@ module.exports = class Server {
         const { expireDate } = await readBody(event);
         await WireGuard.updateClientExpireDate({ clientId, expireDate });
         return { success: true };
+      }))
+      .get('/api/wireguard/awg', defineEventHandler(() => {
+        return WireGuard.getAwgSettings();
+      }))
+      .put('/api/wireguard/awg', defineEventHandler(async (event) => {
+        const { params } = await readBody(event);
+        const { errors, error } = await WireGuard.updateAwgSettings(params || {});
+        if (errors) {
+          setResponseStatus(event, 400);
+          return { error: 'Invalid AmneziaWG parameters', errors };
+        }
+        if (error) {
+          setResponseStatus(event, 400);
+          return { error };
+        }
+        return { success: true };
+      }))
+      .post('/api/wireguard/awg/generate', defineEventHandler(async (event) => {
+        const { profile } = await readBody(event);
+        return WireGuard.generateAwgSettings({ profile });
       }));
 
     const safePathJoin = (base, target) => {
