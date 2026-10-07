@@ -157,6 +157,41 @@ const EXPIRY_PRESETS = {
   '30d': 30 * 24 * 60 * 60 * 1000,
 };
 
+const pad2 = (number) => String(number).padStart(2, '0');
+
+// dd.mm.yyyy hh:mm
+function formatDate(value, { time = true } = {}) {
+  const date = new Date(value);
+  const day = `${pad2(date.getDate())}.${pad2(date.getMonth() + 1)}.${date.getFullYear()}`;
+  return time ? `${day} ${pad2(date.getHours())}:${pad2(date.getMinutes())}` : day;
+}
+
+// "dd.mm.yyyy" (until 23:59) or "dd.mm.yyyy hh:mm" -> Date, null if invalid.
+function parseDateInput(text) {
+  const match = /^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[\s,]+(\d{1,2}):(\d{2}))?$/.exec(String(text || '').trim());
+  if (!match) return null;
+  const [, day, month, year, hours, minutes] = match.map(Number);
+  const date = match[4] === undefined
+    ? new Date(year, month - 1, day, 23, 59, 59)
+    : new Date(year, month - 1, day, hours, minutes);
+  // Rejects 31.02 and 25:00, which Date would silently roll over
+  if (date.getDate() !== day || date.getMonth() !== month - 1 || date.getHours() !== (match[4] === undefined ? 23 : hours)) {
+    return null;
+  }
+  return date;
+}
+
+// Lifetime choice ('never', '1h', ..., 'custom' + text) -> ISO string,
+// null for permanent, undefined if the custom date is invalid.
+function expiryToIso(preset, customText) {
+  if (preset === 'never') return null;
+  if (preset === 'custom') {
+    const date = parseDateInput(customText);
+    return date ? date.toISOString() : undefined;
+  }
+  return new Date(Date.now() + EXPIRY_PRESETS[preset]).toISOString();
+}
+
 // navigator.clipboard only exists on HTTPS/localhost and may still be denied;
 // the panel is usually opened over plain HTTP, so fall back to execCommand('copy').
 async function copyToClipboard(text) {
@@ -208,6 +243,10 @@ new Vue({
     clientCreateDeleteOnExpire: false,
     clientInfoId: null,
     clientInfoChartFrozen: null,
+    clientInfoExpiryEdit: false,
+    clientInfoExpiry: 'never',
+    clientInfoExpiryCustom: '',
+    clientInfoDeleteOnExpire: false,
     vpnLink: null,
     vpnLinkCopied: null,
     versions: null,
@@ -215,8 +254,6 @@ new Vue({
     clientEditNameId: null,
     clientEditAddress: null,
     clientEditAddressId: null,
-    clientEditExpireDate: null,
-    clientEditExpireDateId: null,
     qrcode: null,
 
     awgFields: AWG_FIELDS,
@@ -334,13 +371,10 @@ new Vue({
   },
   methods: {
     dateTime: (value) => {
-      return new Intl.DateTimeFormat(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: 'numeric',
-      }).format(value);
+      return formatDate(value);
+    },
+    isDateInputValid(text) {
+      return parseDateInput(text) !== null;
     },
     async refresh({
       updateCharts = false,
@@ -461,22 +495,13 @@ new Vue({
         if (this.$refs.clientCreateNameInput) this.$refs.clientCreateNameInput.focus();
       });
     },
-    clientCreateExpiresAt() {
-      if (this.clientCreateExpiry === 'custom') {
-        return this.clientCreateExpiryCustom
-          ? new Date(this.clientCreateExpiryCustom).toISOString()
-          : null;
-      }
-      const lifetime = EXPIRY_PRESETS[this.clientCreateExpiry];
-      return lifetime ? new Date(Date.now() + lifetime).toISOString() : null;
-    },
     createClient() {
       // An empty field means "use the suggested name from the placeholder".
       const name = this.clientCreateName || this.clientCreatePlaceholder;
       if (!name) return;
-      if (this.clientCreateExpiry === 'custom' && !this.clientCreateExpiryCustom) return;
 
-      const expiresAt = this.clientCreateExpiresAt();
+      const expiresAt = expiryToIso(this.clientCreateExpiry, this.clientCreateExpiryCustom);
+      if (expiresAt === undefined) return;
       const deleteOnExpire = expiresAt !== null && this.clientCreateDeleteOnExpire;
       this.clientCreate = null;
 
@@ -488,8 +513,37 @@ new Vue({
       // Clicks on buttons, toggles and inline editors keep their own meaning.
       if (event.target.closest('button, a, input, textarea, select, [data-no-info]')) return;
       if (window.getSelection().toString()) return;
+      this.showClientInfo(client);
+    },
+    showClientInfo(client, { editExpiry = false } = {}) {
       this.clientInfoChartFrozen = null;
+      this.clientInfoExpiryEdit = false;
       this.clientInfoId = client.id;
+      if (editExpiry) this.startClientExpiryEdit();
+    },
+    startClientExpiryEdit() {
+      const client = this.clientInfo;
+      if (!client) return;
+      this.clientInfoExpiry = client.expiredAt ? 'custom' : 'never';
+      this.clientInfoExpiryCustom = client.expiredAt ? formatDate(client.expiredAt) : '';
+      this.clientInfoDeleteOnExpire = client.deleteOnExpire;
+      this.clientInfoExpiryEdit = true;
+    },
+    saveClientExpiry() {
+      const client = this.clientInfo;
+      const expiresAt = expiryToIso(this.clientInfoExpiry, this.clientInfoExpiryCustom);
+      if (!client || expiresAt === undefined) return;
+
+      this.api.updateClientExpiry({
+        clientId: client.id,
+        expiresAt,
+        deleteOnExpire: expiresAt !== null && this.clientInfoDeleteOnExpire,
+      })
+        .then(() => {
+          this.clientInfoExpiryEdit = false;
+        })
+        .catch((err) => alert(err.message || err.toString()))
+        .finally(() => this.refresh().catch(console.error));
     },
     showVpnLink(client) {
       this.vpnLink = null;
@@ -548,11 +602,6 @@ new Vue({
     },
     updateClientAddress(client, address) {
       this.api.updateClientAddress({ clientId: client.id, address })
-        .catch((err) => alert(err.message || err.toString()))
-        .finally(() => this.refresh().catch(console.error));
-    },
-    updateClientExpireDate(client, expireDate) {
-      this.api.updateClientExpireDate({ clientId: client.id, expireDate })
         .catch((err) => alert(err.message || err.toString()))
         .finally(() => this.refresh().catch(console.error));
     },
@@ -652,14 +701,7 @@ new Vue({
     },
     expiredDateFormat: (value) => {
       if (value === null) return i18n.t('Permanent');
-      const dateTime = new Date(value);
-      const options = {
-        year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
-      };
-      return dateTime.toLocaleString(i18n.locale, options);
-    },
-    expiredDateEditFormat: (value) => {
-      if (value === null) return 'yyyy-MM-dd';
+      return formatDate(value);
     },
   },
   watch: {
@@ -814,6 +856,14 @@ new Vue({
     },
     awgNewProfile() {
       return detectAwgProfile(this.awgForm);
+    },
+    // Matches the server: a client disabled because it expired is enabled
+    // again when it gets a lifetime that hasn't passed yet.
+    clientInfoWillReenable() {
+      const client = this.clientInfo;
+      if (!client || client.enabled || !client.expiredAt || new Date(client.expiredAt) > new Date()) return false;
+      const expiresAt = expiryToIso(this.clientInfoExpiry, this.clientInfoExpiryCustom);
+      return expiresAt === null || (expiresAt !== undefined && new Date(expiresAt) > new Date());
     },
     showRowCharts() {
       return this.uiChartType > 0 && this.uiShowCharts;

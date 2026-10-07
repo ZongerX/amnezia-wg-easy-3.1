@@ -471,10 +471,25 @@ Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
     await this.saveConfig();
   }
 
-  async updateClientExpireDate({ clientId, expireDate }) {
+  /**
+   * Changes when a client expires. `expiresAt` is an exact moment (null =
+   * permanent); the legacy `expireDate` is a day (expires at 23:59:59).
+   * A client that was disabled because it had expired is enabled again when
+   * it gets a lifetime that has not passed yet.
+   */
+  async updateClientExpireDate({
+    clientId, expireDate, expiresAt, deleteOnExpire,
+  }) {
     const client = await this.getClient({ clientId });
+    const now = new Date();
+    const wasExpired = !!client.expiredAt && new Date(client.expiredAt) <= now;
 
-    if (expireDate) {
+    if (expiresAt !== undefined) {
+      client.expiredAt = expiresAt === null ? null : new Date(expiresAt);
+      if (client.expiredAt !== null && Number.isNaN(client.expiredAt.getTime())) {
+        throw new ServerError(`Invalid expiration date: ${expiresAt}`, 400);
+      }
+    } else if (expireDate) {
       client.expiredAt = new Date(expireDate);
       client.expiredAt.setHours(23);
       client.expiredAt.setMinutes(59);
@@ -482,7 +497,15 @@ Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
     } else {
       client.expiredAt = null;
     }
-    client.updatedAt = new Date();
+
+    if (deleteOnExpire !== undefined) client.deleteOnExpire = deleteOnExpire === true;
+    if (client.expiredAt === null) client.deleteOnExpire = false;
+
+    if (!client.enabled && wasExpired && (client.expiredAt === null || client.expiredAt > now)) {
+      debug(`Client ${clientId} got a new lifetime, enabling it again.`);
+      client.enabled = true;
+    }
+    client.updatedAt = now;
 
     await this.saveConfig();
   }

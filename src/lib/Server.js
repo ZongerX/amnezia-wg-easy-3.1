@@ -383,8 +383,12 @@ module.exports = class Server {
         if (clientId === '__proto__' || clientId === 'constructor' || clientId === 'prototype') {
           throw createError({ status: 403 });
         }
-        const { expireDate } = await readBody(event);
-        await WireGuard.updateClientExpireDate({ clientId, expireDate });
+        const {
+          expireDate, expiresAt, deleteOnExpire,
+        } = await readBody(event);
+        await WireGuard.updateClientExpireDate({
+          clientId, expireDate, expiresAt, deleteOnExpire,
+        });
         return { success: true };
       }))
       .get('/api/wireguard/awg', defineEventHandler(() => {

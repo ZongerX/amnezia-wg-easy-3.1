@@ -196,11 +196,11 @@ class API {
     });
   }
 
-  async updateClientExpireDate({ clientId, expireDate }) {
+  async updateClientExpiry({ clientId, expiresAt, deleteOnExpire }) {
     return this.call({
       method: 'put',
-      path: `/wireguard/client/${clientId}/expireDate/`,
-      body: { expireDate },
+      path: `/wireguard/client/${clientId}/expireDate`,
+      body: { expiresAt, deleteOnExpire },
     });
   }
 
