@@ -94,6 +94,20 @@ const AWG_FIELDS = {
 
 const AWG_PROFILES = ['3.1', '2.0', '1.0'];
 
+// Same rules as Awg.detectProfile() on the server, for form values.
+function detectAwgProfile(form) {
+  const has = (keys) => keys.some((key) => form[key] === true || (typeof form[key] === 'string' && form[key] !== ''));
+  if (has(['headerProtectionKey', 'randomTrailers', 'contentPaddingAddition', 'rekeyAfterTime',
+    'rekeyTimeout', 'rejectAfterTime', 'keepaliveTimeout', 'maxHandshakeAttempts', 'disableCookies'])) {
+    return '3.1';
+  }
+  if (has(['s3', 's4', 'i1', 'i2', 'i3', 'i4', 'i5'])
+    || ['h1', 'h2', 'h3', 'h4'].some((key) => String(form[key] || '').includes('-'))) {
+    return '2.0';
+  }
+  return '1.0';
+}
+
 // Values from the API -> form strings ('' = unset); booleans stay booleans.
 function awgParamsToForm(params) {
   const form = {};
@@ -214,6 +228,8 @@ new Vue({
     awgVersions: {},
     awgDefaultKeepalive: '0',
     awgSaving: false,
+    awgSavedForm: {},
+    awgConfirmOpen: false,
 
     currentRelease: null,
     latestRelease: null,
@@ -560,6 +576,7 @@ new Vue({
       this.api.getAwgSettings()
         .then((settings) => {
           this.awgForm = awgParamsToForm(settings.params);
+          this.awgSavedForm = awgParamsToForm(settings.params);
           this.awgProfile = settings.profile;
           this.awgVersions = settings.versions;
           this.awgDefaultKeepalive = settings.defaultPersistentKeepalive;
@@ -579,7 +596,15 @@ new Vue({
     generateAwgHeaderProtectionKey() {
       this.awgForm.headerProtectionKey = randomBase64Key();
     },
-    saveAwgSettings() {
+    saveAwgSettings({ confirmed = false } = {}) {
+      // Changing parameters that must match on both sides breaks every
+      // existing client config, so ask first.
+      if (!confirmed && this.awgBreakingChanges.length > 0) {
+        this.awgConfirmOpen = true;
+        return;
+      }
+
+      this.awgConfirmOpen = false;
       this.awgSaving = true;
       this.api.updateAwgSettings(this.awgForm)
         .then(() => {
@@ -651,6 +676,7 @@ new Vue({
       this.clientInfoId = null;
       this.vpnLink = null;
       this.clientCreate = null;
+      this.awgConfirmOpen = false;
     });
 
     this.api = new API();
@@ -776,6 +802,18 @@ new Vue({
       opts.chart.type = UI_CHART_TYPES[this.uiChartType].type || false;
       opts.stroke.width = UI_CHART_TYPES[this.uiChartType].strokeWidth;
       return opts;
+    },
+    awgBreakingChanges() {
+      // An unset toggle and "off" mean the same, hence false -> ''.
+      const normalize = (value) => (typeof value === 'boolean'
+        ? (value ? 'on' : '')
+        : String(value ?? '').trim());
+      return AWG_FIELDS.shared
+        .filter(({ key }) => normalize(this.awgForm[key]) !== normalize(this.awgSavedForm[key]))
+        .map(({ label }) => label);
+    },
+    awgNewProfile() {
+      return detectAwgProfile(this.awgForm);
     },
     showRowCharts() {
       return this.uiChartType > 0 && this.uiShowCharts;

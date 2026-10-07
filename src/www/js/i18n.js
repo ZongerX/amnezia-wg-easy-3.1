@@ -81,6 +81,10 @@ const messages = { // eslint-disable-line no-unused-vars
     deleteOnExpire: 'Delete when it expires (otherwise just disable)',
     willBeDeleted: 'will be deleted',
     chartPaused: 'paused',
+    awgConfirmTitle: 'Are you sure?',
+    awgConfirmText: 'All client configs will stop working: you will have to send them to every client again (QR code, file or vpn:// link).',
+    awgConfirmChanged: 'Changed',
+    awgConfirmYes: 'Yes, save and restart',
   },
   ua: {
     name: 'Ім`я',
@@ -196,6 +200,10 @@ const messages = { // eslint-disable-line no-unused-vars
     deleteOnExpire: 'Удалить по истечении (иначе — просто отключить)',
     willBeDeleted: 'будет удалён',
     chartPaused: 'пауза',
+    awgConfirmTitle: 'Вы уверены?',
+    awgConfirmText: 'Конфигурации всех клиентов перестанут работать, вам придётся передать их им заново (QR-код, файл или ссылка vpn://).',
+    awgConfirmChanged: 'Изменены',
+    awgConfirmYes: 'Да, сохранить и перезапустить',
   },
   tr: { // Müslüm Barış Korkmazer @babico
     name: 'İsim',
