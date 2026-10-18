@@ -1,17 +1,23 @@
+# Works as is: `docker compose up -d`.
+# WG_HOST is detected automatically, the Web UI password is printed once in the log:
+#   docker compose logs | grep "Web UI password"
+# Optional settings: copy .env.example to .env next to this file and edit it.
+
 volumes:
   etc_wireguard:
 
 services:
   amnezia-wg-easy:
-    env_file:
-      - .env
     image: ghcr.io/zongerx/amnezia-wg-easy-3.1:${IMAGE_TAG:-latest}
     container_name: amnezia-wg-easy
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - etc_wireguard:/etc/wireguard
     ports:
-      - "${WG_PORT}:${WG_PORT}/udp"
-      - "${PORT}:${PORT}/tcp"
+      - "${WG_PORT:-51820}:${WG_PORT:-51820}/udp"
+      - "${PORT:-51821}:${PORT:-51821}/tcp"
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
@@ -21,4 +27,4 @@ services:
       - net.ipv4.ip_forward=1
       - net.ipv4.conf.all.src_valid_mark=1
     devices:
-    - /dev/net/tun:/dev/net/tun
+      - /dev/net/tun:/dev/net/tun

@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('path');
 const debug = require('debug')('WireGuard');
 const crypto = require('node:crypto');
+const https = require('node:https');
 const zlib = require('node:zlib');
 const QRCode = require('qrcode');
 const CRC32 = require('crc-32');
@@ -53,13 +54,55 @@ const initialAwgParams = () => {
   return params;
 };
 
+// Used when WG_HOST is not set: services that answer with the caller's IPv4.
+const PUBLIC_IP_SERVICES = [
+  'https://api.ipify.org',
+  'https://ifconfig.me/ip',
+  'https://icanhazip.com',
+];
+
+const fetchText = (url) => new Promise((resolve, reject) => {
+  const request = https.get(url, { family: 4, timeout: 5000, headers: { 'User-Agent': 'curl/8' } }, (response) => {
+    let body = '';
+    response.on('data', (chunk) => { body += chunk; });
+    response.on('end', () => resolve(body.trim()));
+  });
+  request.on('timeout', () => request.destroy(new Error('timeout')));
+  request.on('error', reject);
+});
+
+const detectPublicIp = async () => {
+  for (const url of PUBLIC_IP_SERVICES) {
+    try {
+      const ip = await fetchText(url);
+      if (Util.isValidIPv4(ip)) return ip;
+    } catch (err) {
+      debug(`Could not get the public IP from ${url}: ${err.message}`);
+    }
+  }
+  return null;
+};
+
 module.exports = class WireGuard {
+
+  // WG_HOST, or the public IP detected once on start
+  async __resolveHost() {
+    if (this.wgHost) return;
+    if (WG_HOST) {
+      this.wgHost = WG_HOST;
+      return;
+    }
+
+    this.wgHost = await detectPublicIp();
+    if (!this.wgHost) {
+      throw new Error('WG_HOST is not set and the public IP could not be detected. Set WG_HOST in .env.');
+    }
+    debug(`WG_HOST is not set, using the detected public IP ${this.wgHost}. Set WG_HOST in .env to use a domain.`);
+  }
 
   async __buildConfig() {
     this.__configPromise = Promise.resolve().then(async () => {
-      if (!WG_HOST) {
-        throw new Error('WG_HOST Environment Variable Not Set!');
-      }
+      await this.__resolveHost();
 
       debug('Loading configuration...');
       let config;
@@ -273,7 +316,7 @@ PublicKey = ${config.server.publicKey}
 ${client.preSharedKey ? `PresharedKey = ${client.preSharedKey}\n` : ''
 }AllowedIPs = ${WG_ALLOWED_IPS}
 PersistentKeepalive = ${config.server.persistentKeepalive ?? WG_PERSISTENT_KEEPALIVE}
-Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
+Endpoint = ${this.wgHost}:${WG_CONFIG_PORT}`;
   }
 
   async getClientQRCodeSVG({ clientId }) {
@@ -299,7 +342,7 @@ Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
     const params = Awg.normalize(config.server);
     const lastConfig = {
       config: await this.getClientConfiguration({ clientId }),
-      hostName: WG_HOST,
+      hostName: this.wgHost,
       port: Number(WG_CONFIG_PORT),
       client_priv_key: client.privateKey,
       client_ip: `${client.address}/24`,
@@ -323,7 +366,7 @@ Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
       }],
       defaultContainer: 'amnezia-awg',
       description: client.name,
-      hostName: WG_HOST,
+      hostName: this.wgHost,
     };
     const dns = (WG_DEFAULT_DNS || '').split(',').map((ip) => ip.trim()).filter(Boolean);
     if (dns.length > 0) {

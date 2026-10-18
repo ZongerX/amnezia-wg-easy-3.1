@@ -29,28 +29,40 @@
 
 ## Требования
 
-* Linux-сервер с Docker: `curl -sSL https://get.docker.com | sh`.
+* Linux-сервер с Docker и Docker Compose v2.24+: `curl -sSL https://get.docker.com | sh`.
 * Устройство `/dev/net/tun` (есть практически на любом VPS).
 
 ## Быстрый старт через Docker Compose
 
+`docker-compose.yml` самодостаточен, больше ничего не нужно:
+
 ```bash
 mkdir -p ~/amnezia-wg-easy && cd ~/amnezia-wg-easy
 curl -fsSLO https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/docker-compose.yml
-curl -fsSLO https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/.env
-nano .env    # заполните WG_HOST и WG_PORT
 docker compose up -d
-docker compose logs | grep "Web UI password"
+docker compose logs | grep -E "Web UI password|public IP"
 ```
 
-В `.env` нужно заполнить два значения:
+При первом запуске определяется публичный IP сервера (он попадает в конфиги клиентов как `WG_HOST`),
+а в лог выводится случайный пароль веб-интерфейса. Откройте `http://<IP сервера>:51821`, войдите, создайте
+клиента и отсканируйте QR-код в AmneziaWG или вставьте ссылку `vpn://` в AmneziaVPN. Если на сервере есть
+файрвол, откройте в нём порт VPN (по умолчанию UDP 51820).
 
-* **WG_HOST** — публичный IP или домен сервера. IP покажет `curl -4 ifconfig.me`.
+### Настройки (по желанию)
+
+Чтобы что-то поменять, положите `.env` рядом с `docker-compose.yml`; основные настройки перечислены в
+[.env.example](./.env.example):
+
+```bash
+curl -fsSL -o .env https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/.env.example
+nano .env
+docker compose up -d
+```
+
+Что стоит поменять:
+
 * **WG_PORT** — случайный UDP-порт, например из диапазона 20000–60000. Стандартный 51820 сканеры и DPI проверяют первым.
-
-Затем откройте `http://<WG_HOST>:51821` и войдите с паролем из лога. Создайте клиента и отсканируйте
-QR-код в AmneziaWG или вставьте ссылку `vpn://` в AmneziaVPN. Если на сервере есть файрвол, откройте в нём
-порт VPN (UDP).
+* **WG_HOST** — домен вместо определённого IP, чтобы конфиги клиентов не сломались при смене IP.
 
 ### Пароль веб-интерфейса
 
@@ -62,10 +74,10 @@ QR-код в AmneziaWG или вставьте ссылку `vpn://` в AmneziaV
 * **Свой пароль:** `docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw 'ВАШ_ПАРОЛЬ'` выведет строку
   `PASSWORD_HASH='…'`. Вставьте её в `.env` (одинарные кавычки обязательны: в хэше есть `$`) и выполните
   `docker compose up -d`. Пока `PASSWORD_HASH` задан, сгенерированный пароль не используется.
-* **Свой случайный пароль одной командой:**
+* **Свой случайный пароль одной командой** (допишет строку в `.env`, создав файл, если его нет):
   ```bash
   PASSWORD=$(openssl rand -base64 12); echo "Пароль веб-интерфейса: $PASSWORD"
-  sed -i "s|^PASSWORD_HASH=.*|$(docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw "$PASSWORD")|" .env
+  docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw "$PASSWORD" >> .env
   ```
 
 > 💡 `IMAGE_TAG` указывать не нужно: Compose по умолчанию берёт `latest` — стабильную сборку из `master`.
@@ -77,7 +89,7 @@ QR-код в AmneziaWG или вставьте ссылку `vpn://` в AmneziaV
   docker run -d \
   --name=amnezia-wg-easy \
   -e LANG=ru \
-  -e WG_HOST=<🚨IP_ВАШЕГО_СЕРВЕРА> \
+  -e WG_HOST=<IP_ВАШЕГО_СЕРВЕРА> \
   -e PASSWORD_HASH='<🚨ХЭШ_ПАРОЛЯ>' \
   -e PORT=51821 \
   -e WG_PORT=51820 \
@@ -93,7 +105,7 @@ QR-код в AmneziaWG или вставьте ссылку `vpn://` в AmneziaV
   ghcr.io/zongerx/amnezia-wg-easy-3.1
 ```
 
-> 💡 `IP_ВАШЕГО_СЕРВЕРА` — внешний IP сервера или домен (в том числе Dynamic DNS).
+> 💡 `WG_HOST` необязателен: внешний IP сервера или домен (в том числе Dynamic DNS). Без него публичный IP определяется при запуске.
 >
 > 💡 `ХЭШ_ПАРОЛЯ` — bcrypt-хэш пароля для входа в веб-интерфейс, см. [How_to_generate_an_bcrypt_hash.md](./How_to_generate_an_bcrypt_hash.md).
 
@@ -105,14 +117,14 @@ QR-код в AmneziaWG или вставьте ссылку `vpn://` в AmneziaV
 
 ## Настройки
 
-Задаются переменными окружения: в `.env` для Docker Compose или через `-e KEY="VALUE"` в `docker run`.
+Задаются в `.env` рядом с `docker-compose.yml` (см. [.env.example](./.env.example)) или через `-e KEY="VALUE"` в `docker run`. Все необязательны.
 
 | Переменная | По умолчанию | Пример | Описание |
 |------------|--------------|--------|----------|
 | `PORT` | `51821` | `6789` | TCP-порт веб-интерфейса. |
 | `WEBUI_HOST` | `0.0.0.0` | `localhost` | Адрес, на котором слушает веб-интерфейс. |
 | `PASSWORD_HASH` | - | `'$2a$12$...'` | bcrypt-хэш пароля веб-интерфейса. Если не задан, при первом запуске генерируется случайный пароль и выводится в лог, см. [Пароль веб-интерфейса](#пароль-веб-интерфейса). |
-| `WG_HOST` | - | `vpn.myserver.com` | Публичный адрес VPN-сервера. |
+| `WG_HOST` | определяется | `vpn.myserver.com` | Публичный адрес VPN-сервера. Если не задан, при запуске определяется публичный IPv4. |
 | `WG_DEVICE` | `eth0` | `ens6f0` | Интерфейс, через который уходит трафик клиентов (внутри контейнера — `eth0`). |
 | `WG_PORT` | `51820` | `34519` | Публичный UDP-порт VPN. Лучше случайный. |
 | `WG_CONFIG_PORT` | `51820` | `12345` | UDP-порт, который попадает в конфиги клиентов, если он отличается от `WG_PORT` (например, за NAT). |

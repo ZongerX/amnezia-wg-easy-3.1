@@ -29,28 +29,40 @@ The web UI of [w0rng/amnezia-wg-easy](https://github.com/w0rng/amnezia-wg-easy) 
 
 ## Requirements
 
-* A Linux host with Docker installed: `curl -sSL https://get.docker.com | sh`.
+* A Linux host with Docker and Docker Compose v2.24+ installed: `curl -sSL https://get.docker.com | sh`.
 * The `/dev/net/tun` device (present on virtually every VPS).
 
 ## Quick start with Docker Compose
 
+`docker-compose.yml` is self-contained, nothing else is needed:
+
 ```bash
 mkdir -p ~/amnezia-wg-easy && cd ~/amnezia-wg-easy
 curl -fsSLO https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/docker-compose.yml
-curl -fsSLO https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/.env
-nano .env    # set WG_HOST and WG_PORT
 docker compose up -d
-docker compose logs | grep "Web UI password"
+docker compose logs | grep -E "Web UI password|public IP"
 ```
 
-In `.env` set two values:
+On first start the server's public IP is detected (used as `WG_HOST` in client configs) and a random
+Web UI password is printed to the log. Open `http://<server IP>:51821`, log in, create a client and scan
+the QR code with AmneziaWG, or copy the `vpn://` link into AmneziaVPN. Open the VPN port (UDP 51820 by
+default) in your firewall if you have one.
 
-* **WG_HOST**: the public IP or domain of the server. The IP is printed by `curl -4 ifconfig.me`.
-* **WG_PORT**: pick a random UDP port, e.g. 20000–60000. The default 51820 is the first one scanners and DPI look at.
+### Settings (optional)
 
-Then open `http://<WG_HOST>:51821` and log in with the password from the log. Create a client and scan
-the QR code with AmneziaWG, or copy the `vpn://` link into AmneziaVPN. Open the VPN port (UDP) in your
-firewall if you have one.
+To change anything, put a `.env` next to `docker-compose.yml`; [.env.example](./.env.example) lists the
+common settings:
+
+```bash
+curl -fsSL -o .env https://raw.githubusercontent.com/ZongerX/amnezia-wg-easy-3.1/master/.env.example
+nano .env
+docker compose up -d
+```
+
+Worth changing:
+
+* **WG_PORT**: a random UDP port, e.g. 20000–60000. The default 51820 is the first one scanners and DPI look at.
+* **WG_HOST**: a domain instead of the detected IP, so client configs survive an IP change.
 
 ### Web UI password
 
@@ -62,10 +74,10 @@ container log, and only its bcrypt hash is kept in the data volume (`/etc/wiregu
 * **Your own password:** `docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw 'YOUR_PASSWORD'` prints a
   `PASSWORD_HASH='…'` line. Put it into `.env` (keep the single quotes, the hash contains `$`) and run
   `docker compose up -d`. While `PASSWORD_HASH` is set, the generated password is ignored.
-* **A random one of your own, in one go:**
+* **A random one of your own, in one go** (appends the line to `.env`, creating it if needed):
   ```bash
   PASSWORD=$(openssl rand -base64 12); echo "Web UI password: $PASSWORD"
-  sed -i "s|^PASSWORD_HASH=.*|$(docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw "$PASSWORD")|" .env
+  docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw "$PASSWORD" >> .env
   ```
 
 > 💡 `IMAGE_TAG` is optional: Compose uses `latest` (the stable `master` build) by default.
@@ -77,7 +89,7 @@ container log, and only its bcrypt hash is kept in the data volume (`/etc/wiregu
   docker run -d \
   --name=amnezia-wg-easy \
   -e LANG=en \
-  -e WG_HOST=<🚨YOUR_SERVER_IP> \
+  -e WG_HOST=<YOUR_SERVER_IP> \
   -e PASSWORD_HASH='<🚨YOUR_ADMIN_PASSWORD_HASH>' \
   -e PORT=51821 \
   -e WG_PORT=51820 \
@@ -93,7 +105,7 @@ container log, and only its bcrypt hash is kept in the data volume (`/etc/wiregu
   ghcr.io/zongerx/amnezia-wg-easy-3.1
 ```
 
-> 💡 Replace `YOUR_SERVER_IP` with your WAN IP, or a Dynamic DNS hostname.
+> 💡 `WG_HOST` is optional: your WAN IP or a Dynamic DNS hostname. Without it the public IP is detected on start.
 >
 > 💡 Replace `YOUR_ADMIN_PASSWORD_HASH` with a bcrypt password hash to log in on the Web UI.
 > See [How_to_generate_an_bcrypt_hash.md](./How_to_generate_an_bcrypt_hash.md) for know how generate the hash.
@@ -106,14 +118,14 @@ The Prometheus metrics will now be available on `http://0.0.0.0:51821/metrics`. 
 
 ## Options
 
-These options can be configured by setting environment variables using `-e KEY="VALUE"` in the `docker run` command.
+Set them in a `.env` next to `docker-compose.yml` (see [.env.example](./.env.example)) or with `-e KEY="VALUE"` in `docker run`. All of them are optional.
 
 | Env                           | Default           | Example                        | Description                                                                                                                                                                                                              |
 |-------------------------------|-------------------|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `PORT`                        | `51821`           | `6789`                         | TCP port for Web UI.                                                                                                                                                                                                     |
 | `WEBUI_HOST`                  | `0.0.0.0`         | `localhost`                    | IP address web UI binds to.                                                                                                                                                                                              |
 | `PASSWORD_HASH`               | -                 | `'$2a$12$...'`                 | bcrypt hash of the Web UI password. If empty, a random password is generated on first start and printed in the log, see [Web UI password](#web-ui-password). |
-| `WG_HOST`                     | -                 | `vpn.myserver.com`             | The public hostname of your VPN server.                                                                                                                                                                                  |
+| `WG_HOST`                     | detected                 | `vpn.myserver.com`             | The public hostname of your VPN server. If not set, the public IPv4 is detected on start.                                                                                                                                                                                  |
 | `WG_DEVICE`                   | `eth0`            | `ens6f0`                       | Ethernet device the wireguard traffic should be forwarded through.                                                                                                                                                       |
 | `WG_PORT`                     | `51820`           | `12345`                        | The public UDP port of your VPN server. WireGuard will listen on that (othwise default) inside the Docker container.                                                                                                     |
 | `WG_CONFIG_PORT`              | `51820`           | `12345`                        | The UDP port used on [Home Assistant Plugin](https://github.com/adriy-be/homeassistant-addons-jdeath/tree/main/wgeasy)                                                                                                   |
