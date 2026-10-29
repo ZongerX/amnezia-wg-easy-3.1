@@ -2,9 +2,7 @@
 # WG_HOST is detected automatically, the Web UI password is printed once in the log:
 #   docker compose logs | grep "Web UI password"
 # Optional settings: copy .env.example to .env next to this file and edit it.
-
-volumes:
-  etc_wireguard:
+# Configs and keys are kept in ./etc_wireguard next to this file.
 
 services:
   amnezia-wg-easy:
@@ -14,7 +12,7 @@ services:
       - path: .env
         required: false
     volumes:
-      - etc_wireguard:/etc/wireguard
+      - ./etc_wireguard:/etc/wireguard
     ports:
       - "${WG_PORT:-51820}:${WG_PORT:-51820}/udp"
       - "${PORT:-51821}:${PORT:-51821}/tcp"

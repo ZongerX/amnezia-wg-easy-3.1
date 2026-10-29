@@ -48,6 +48,9 @@ docker compose logs | grep -E "Web UI password|public IP"
 клиента и отсканируйте QR-код в AmneziaWG или вставьте ссылку `vpn://` в AmneziaVPN. Если на сервере есть
 файрвол, откройте в нём порт VPN (по умолчанию UDP 51820).
 
+Все данные (клиенты, ключи, параметры AmneziaWG, хэш пароля) хранятся в папке `./etc_wireguard` рядом
+с `docker-compose.yml`: её и нужно бэкапить, а чтобы начать с нуля — удалить.
+
 ### Настройки (по желанию)
 
 Чтобы что-то поменять, положите `.env` рядом с `docker-compose.yml`; основные настройки перечислены в
@@ -67,10 +70,10 @@ docker compose up -d
 ### Пароль веб-интерфейса
 
 Если `PASSWORD_HASH` пустой, при первом запуске генерируется случайный пароль. Он выводится в лог контейнера
-**один раз**, а в томе с данными хранится только его bcrypt-хэш (`/etc/wireguard/password.hash`).
+**один раз**, а хранится только его bcrypt-хэш — в `./etc_wireguard/password.hash`.
 
 * **Потеряли пароль?** Удалите файл и перезапустите контейнер — в логе появится новый:
-  `docker exec amnezia-wg-easy rm /etc/wireguard/password.hash && docker compose restart`
+  `rm etc_wireguard/password.hash && docker compose restart`
 * **Свой пароль:** `docker run --rm ghcr.io/zongerx/amnezia-wg-easy-3.1 wgpw 'ВАШ_ПАРОЛЬ'` выведет строку
   `PASSWORD_HASH='…'`. Вставьте её в `.env` (одинарные кавычки обязательны: в хэше есть `$`) и выполните
   `docker compose up -d`. Пока `PASSWORD_HASH` задан, сгенерированный пароль не используется.

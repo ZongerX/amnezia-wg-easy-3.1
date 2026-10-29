@@ -6,3 +6,4 @@
 *.swp
 .idea
 .env
+/etc_wireguard
